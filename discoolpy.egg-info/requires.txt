@@ -1,5 +1,0 @@
-tespy>=0.9.16
-pandas>=2.0.0
-matplotlib>=3.5.0
-pyyaml>=6.0
-numpy>=1.21.0
