@@ -1,0 +1,54 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# ── Distribution / packaging ──────────────────────────────────────────────
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+MANIFEST
+
+# ── Virtual environments ──────────────────────────────────────────────────
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── Jupyter notebooks ─────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*_executed.ipynb
+
+# ── TESPy design-state directories ───────────────────────────────────────
+# These are generated at runtime and should not be committed.
+*_design_state/
+*design_state*/
+
+# ── Simulation outputs ────────────────────────────────────────────────────
+# Generated output directories; commit only the configs and source code.
+outputs/
+*_outputs/
+yaml_example_outputs/
+tutorial_outputs/
+
+# ── IDE / editor ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Testing ───────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
