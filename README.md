@@ -68,43 +68,6 @@ All documentation lives in the `docs/` directory and can be read directly as Mar
 
 ---
 
-## Repository Layout
-
-```
-discoolpy/
-├── discoolpy/   # Main package
-│   ├── __init__.py
-│   ├── branch.py               # Distribution branch (pipes, pump, bypass)
-│   ├── building.py             # Building heat-exchanger wrapper
-│   ├── chiller.py              # Vapour-compression chiller
-│   ├── cold_storage.py         # Cold/ice thermal storage
-│   ├── cooling_tower.py        # Condenser heat-rejection tower
-│   ├── time_snapshot.py        # Time-step data container
-│   └── utils.py                # YAML loading, system assembly, plotting
-│       
-├── configs/
-│   ├── tutorial_two_building.yaml                    # Tutorial scenario
-│   ├── config_length_derived_pr.yaml                 # Planned-length scenario
-│   └── config_length_pipes.yaml                      # Full Darcy pipe scenario
-├── examples/
-│   ├── tutorial_dummy_data.ipynb   # Step-by-step Jupyter tutorial
-│   ├── storage_comparison_example.py  # Storage vs no-storage comparison
-│   └── validate_length_pipe_design.py # Design-point validation script
-├── docs/
-│   ├── index.md
-│   ├── installation.md
-│   ├── getting_started.md
-│   ├── pipe_parameter_guide.md
-│   └── api_reference.md
-├── environment.yml     # Conda environment specification
-├── setup.py            # Package installation
-├── LICENSE             # MIT License
-├── CONTRIBUTING.md     # Contribution guidelines
-└── README.md           # This file
-```
-
----
-
 ## Examples
 
 ### Tutorial notebook
