@@ -9,7 +9,7 @@
 ---
 ⚠️ **Note: DisCoolPy is currently in Beta (v0.1.0b1).** 
 > The tool is undergoing active development and testing. APIs and modeling functions 
-> may change without warning. We would love your feedback—please report any bugs 
+> may change without warning. We would love your feedback, please report any bugs 
 > or suggestions in the [Issues](https://github.com/AnasAlgarei/discoolpy/issues) tab!
 
 ---
