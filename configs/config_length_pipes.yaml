@@ -1,0 +1,124 @@
+metadata:
+  name: config_length_pipes
+  description: Planned-network three-building district-cooling scenario with length-based Darcy pipe inputs and optional ice storage.
+
+network:
+  chilled_water_cycle_closer: chilled water cycle closer
+
+design:
+  supply_temperature_degC: 7.0
+  building_return_temperature_degC: 12.0
+  ambient_temperature_degC: 43.0
+  condenser_inlet_temperature_degC: 36.5
+  condenser_outlet_temperature_degC: 41.5
+  chilled_water_pressure_bar: 3.0
+  condenser_pressure_bar: 3.0
+  pump_power_W: 650.0
+  pump_efficiency: 0.70
+  bypass_mass_flow_kg_s: 0.10
+  cp_water_J_kgK: 4180.0
+
+chiller:
+  label: yaml_length_pipe_chiller
+  T_evap_degC: 2.0
+  T_cond_degC: 46.0
+  eta_s: 0.75
+  refrigerant: R134a
+  pressure_ratios:
+    evap_1: 0.999
+    evap_2: 0.999
+    cond_1: 0.999
+    cond_2: 1.0
+  native_offdesign:
+    enabled: true
+    evaporator_ttd_l: null
+    condenser_ttd_u: 4.5
+    use_pressure_loss_characteristics: false
+
+cooling_tower:
+  label: yaml storage comparison cooling tower
+  fluid:
+    water: 1.0
+  pr: null
+  approach_temperature_K: -6.5
+  native_offdesign: false
+  start_mass_flow_kg_s: 45.0
+
+buildings:
+  - label: building 1
+    Q_design_W: 260000.0
+    pr: 0.995
+  - label: building 2
+    Q_design_W: 210000.0
+    pr: 0.995
+  - label: building 3
+    Q_design_W: 240000.0
+    pr: 0.995
+
+branch:
+  label: district
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: darcy
+  fix_pump_power: false
+  pump_pressure_ratio: 1.08
+  pipes:
+    supply_1:
+      Q: 0.0
+    supply_2:
+      L: 180.0
+      D: 0.30
+      ks: 0.00005
+      Q: 0.0
+    supply_3:
+      L: 140.0
+      D: 0.25
+      ks: 0.00005
+      Q: 0.0
+    return_3:
+      L: 140.0
+      D: 0.25
+      ks: 0.00005
+      Q: 0.0
+    return_2:
+      Q: 0.0
+    return_1: {}
+
+storage:
+  enabled: true
+  label: ice_storage
+  capacity_kWh: 1600.0
+  initial_soc: 0.55
+  max_charge_kW: 180.0
+  max_discharge_kW: 180.0
+  charge_efficiency: 0.90
+  discharge_efficiency: 0.92
+  standby_loss_fraction_per_day: 0.015
+  storage_type: ice
+  target_chiller_load_kW: 555.0
+  minimum_load_fraction: 0.08
+  min_soc: 0.08
+  max_soc: 0.97
+
+profiles:
+  start: '2026-07-01 00:00:00'
+  periods: 336
+  freq: 30min
+  daily_high_degC: [43.0, 44.0, 42.5, 45.0, 44.0, 43.5, 42.8]
+  daily_low_degC: [29.0, 30.0, 29.2, 31.0, 30.0, 29.5, 29.0]
+
+solver:
+  iterinfo: false
+  max_iter: 250
+  progress_interval: 48
+  initial_pressure_step_bar: 0.05
+
+outputs:
+  output_dir: outputs
+  profile_csv: storage_comparison_input_profile.csv
+  without_storage_csv: without_storage_results.csv
+  with_storage_csv: with_storage_results.csv
+  comparison_csv: storage_comparison_summary_timeseries.csv
+  summary_md: storage_comparison_summary.md
+  plot_png: storage_comparison_results.png

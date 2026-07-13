@@ -1,0 +1,83 @@
+# ============================================================
+# Tutorial: Two-Building District Cooling Network
+# ============================================================
+# A minimal, self-contained scenario with dummy data intended
+# for first-time users of the discoolpy.
+#
+# Pressure-ratio rules for this topology:
+#   - Set `pr` on all buildings EXCEPT the last one.
+#   - Set `pr` on supply pipes that connect distinct pressure
+#     islands (e.g. supply_2 links the main island to the
+#     end-of-line island).
+#   - Set `pr` on return_1 (the main return header) to anchor
+#     the return-side pressure.
+#   - Do NOT set `pr` on the last building (it is short-
+#     circuited by the bypass valve and would create a cycle).
+# ============================================================
+
+network:
+  chilled_water_cycle_closer: chw cycle closer
+
+design:
+  supply_temperature_degC: 7.0
+  building_return_temperature_degC: 12.0
+  ambient_temperature_degC: 35.0
+  condenser_inlet_temperature_degC: 30.0
+  condenser_outlet_temperature_degC: 35.0
+  chilled_water_pressure_bar: 3.0
+  condenser_pressure_bar: 3.0
+  pump_power_W: 300.0
+  pump_efficiency: 0.70
+  bypass_mass_flow_kg_s: 0.05
+  cp_water_J_kgK: 4180.0
+
+chiller:
+  label: tutorial_chiller
+  T_evap_degC: 2.0
+  T_cond_degC: 40.0
+  eta_s: 0.80
+  refrigerant: R134a
+  native_offdesign:
+    enabled: true
+    condenser_ttd_u: 5.0
+
+cooling_tower:
+  label: tutorial_cooling_tower
+  fluid:
+    water: 1.0
+  approach_temperature_K: -5.0
+  native_offdesign: false
+  start_mass_flow_kg_s: 20.0
+
+buildings:
+  - label: building_1
+    Q_design_W: 150000.0   # 150 kW peak cooling load
+    pr: 0.995              # small pressure drop across building heat exchanger
+  - label: building_2
+    Q_design_W: 150000.0   # 150 kW peak cooling load
+    pr: null               # last building: pr must NOT be set (bypass short-circuit)
+
+branch:
+  label: tutorial_branch
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: pressure_ratio
+  pipes:
+    supply_1:
+      Q: 0.0               # adiabatic pipe (no heat loss)
+    supply_2:
+      pr: 0.997            # links main pressure island to end-of-line island
+      Q: 0.0
+    return_2:
+      Q: 0.0
+    return_1:
+      pr: 0.999            # anchors the return-header pressure
+      # Q not needed for the last return pipe
+
+solver:
+  iterinfo: false
+  max_iter: 200
+
+outputs:
+  output_dir: tutorial_outputs

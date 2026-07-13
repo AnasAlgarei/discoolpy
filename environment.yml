@@ -1,0 +1,31 @@
+name: discoolpy
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # ── Python runtime ────────────────────────────────────────────────────────
+  - python>=3.9
+
+  # ── Core thermodynamics ───────────────────────────────────────────────────
+  - tespy>=0.9.16          # TESPy thermal engineering systems solver
+  - coolprop>=6.4          # Fluid property library (required by TESPy)
+
+  # ── Scientific stack ──────────────────────────────────────────────────────
+  - numpy>=1.21
+  - pandas>=1.5
+  - matplotlib>=3.5
+  - scipy>=1.7             # used internally by TESPy
+
+  # ── Configuration ─────────────────────────────────────────────────────────
+  - pyyaml>=6.0
+
+  # ── Notebooks (optional, for tutorial) ───────────────────────────────────
+  - jupyter>=1.0
+  - nbconvert>=7.0
+
+  # ── Package installation ──────────────────────────────────────────────────
+  - pip
+  - pip:
+      - -e .               # install this package in editable mode
