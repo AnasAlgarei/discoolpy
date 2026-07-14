@@ -22,8 +22,7 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Topic :: Scientific/Engineering",
     ],
-    packages=find_packages(where="discoolpy"),
-    package_dir={"": "discoolpy"},
+    packages=find_packages(),
     python_requires=">=3.9",
     install_requires=[
         "tespy>=0.9.16",
