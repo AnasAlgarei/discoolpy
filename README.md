@@ -42,10 +42,7 @@ cd discoolpy
 conda env create -f environment.yml
 conda activate discoolpy
 
-# 3. Install the package in editable mode
-pip install -e .
-
-# 4. Run the tutorial notebook
+# 3. Run the tutorial notebook: directley on IDE or type these lines in the terminal:
 cd examples
 jupyter notebook tutorial_dummy_data.ipynb
 ```
