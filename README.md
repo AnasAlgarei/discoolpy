@@ -17,25 +17,11 @@ networks. You supply street lengths, building load profiles and chiller specific
 tool assembles a thermodynamically consistent TESPy network that solves at design point and steps
 through time-varying load profiles.
 
-Two ideas run through it.
-
-**Real networks follow street grids, and street grids fork.** A DisCoolPy network is a *tree* of
-branches. Each branch is a street with its buildings in order, and it ends in one or more
-terminals: a dead-end bypass, a distributed satellite plant with its own chiller and store, or
-another branch. Because every pipe also carries a length and a bearing, the whole thing can be
-drawn as a plan you can hold against a site drawing.
-
-**A district-cooling network is colder than everything around it, so it gains heat everywhere**,
-through buried mains, through building envelopes, and through the walls of a cold store.
-DisCoolPy accounts for all three, because each one is a load the plant has to remove again, and
-each one erodes the flexibility a thermal store or a pre-cooling scheme can actually deliver.
-
 ### Key capabilities
 
 | Feature | Description |
 |---|---|
 | **Branching networks** | Trees of branches following a street grid. Terminals may be end bypasses, satellite plants, or further branches, nested to any depth |
-| **Satellite plants** | Distributed chillers with their own cooling tower and cold store, dispatched to follow the district while their own machine runs level |
 | **Network layout plots** | Plan-view drawing from pipe lengths and bearings. Chillers are squares, towers octagons, storage circles, buildings triangles, forks points |
 | **Result reports and figures** | A printed report and a four-panel figure for every component, plus a whole-system dashboard, from a solved system or a results CSV |
 | **Modular components** | Independent wrappers for chillers, cooling towers, branches, buildings, and cold/ice storage. Any number of buildings |
@@ -177,95 +163,6 @@ pandas, matplotlib, numpy, scipy.
 
 ---
 
-## Scenarios
-
-| File | What it demonstrates |
-|---|---|
-| `configs/config_tutorial.yaml` | Minimal two-building network, adiabatic pipes |
-| `configs/config_length_pipes.yaml` | Native Darcy pipe hydraulics from street lengths |
-| `configs/config_length_derived_pr.yaml` | Design-point pressure ratios derived from lengths |
-| `configs/config_riyadh_heat_gains.yaml` | **Buried mains + hydraulically coupled ice store**, one week of Riyadh July |
-| `configs/config_precooling_flexibility.yaml` | Building envelopes and thermal mass; demand-side flexibility, no store |
-| `configs/config_campus_five_buildings.yaml` | Five buildings, mixed buried/above-ground pipes, **stratified chilled-water tank** |
-| `configs/config_branching_grid.yaml` | **A forking street grid**: four branches, two forks, a satellite plant with its own store |
-
-`discoolpy list` prints the same table from the scenarios' own metadata.
-
-## Examples and notebooks
-
-| File | Contents |
-|---|---|
-| `examples/blank_scenario.yaml` | **A blank scenario to fill in.** Annotated section by section; runs unmodified |
-| `examples/blank_scenario.ipynb` | **The same file, walked through cell by cell.** Start here to build your own |
-| `examples/validate_scenario.py` | Design-point check: topology, degrees of freedom, conductances, energy balance, hydraulic feasibility, layout |
-| `examples/branching_network_example.py` | A forking network, and what a satellite plant is actually worth |
-| `examples/storage_comparison_example.py` | Paired with/without-storage run plus a full flexibility assessment |
-| `examples/precooling_flexibility_example.py` | Pre-cool and coast within a comfort band |
-| `examples/tutorial_dummy_data.ipynb` | 24-hour walkthrough for first-time users |
-| `examples/branching_networks.ipynb` | Branching, degrees of freedom, the layout plotter, a satellite plant over a day |
-| `examples/stratified_storage.ipynb` | The layered tank: thermocline, delivery temperature, and what stratification changes |
-| `examples/heat_gains_and_flexibility.ipynb` | Where the conductances come from; a week with and without an ice store |
-| `examples/precooling_flexibility.ipynb` | Demand-side flexibility from building thermal mass |
-| `examples/building_your_own_scenario.ipynb` | Degrees-of-freedom counting and a five-building campus |
-
----
-
-## Two representative results
-
-### Heat gains and storage: `config_riyadh_heat_gains.yaml`, one week at 30 min
-
-| | Without store | With ice store |
-|---|---:|---:|
-| Peak compressor power | 201.8 kW | 175.0 kW (−13.3 %) |
-| Compressor energy | 26 116 kWh | 26 361 kWh (+0.9 %) |
-| Load factor | 0.770 | 0.897 |
-| Electricity cost | 3732 | 3454 (−7.4 %) |
-| Emissions | 14 364 kg | 14 498 kg (+0.9 %) |
-| Distribution pipe gain | 4.0 % of demand | 4.0 % of demand |
-| Tank ambient gain | - | 0.6 % of demand |
-| Thermal round trip | - | 0.809 |
-| **Electric** round trip | - | 0.853 |
-
-The plant produces **8.4 % more cooling than the buildings consume**. The store cuts peak power
-and cost while *increasing* kWh and emissions. Whether that is a good trade depends entirely on
-the tariff, which is the question a flexibility assessment should surface rather than hide.
-
-### A distributed plant: `config_branching_grid.yaml`, one day at 30 min
-
-| | Without satellite | With satellite |
-|---|---:|---:|
-| Central plant peak duty | 1707 kW | 1536 kW (−10.0 %) |
-| Central compressor peak | 437.5 kW | 393.7 kW (−10.0 %) |
-| **Fleet** compressor peak | 437.5 kW | 437.9 kW (+0.1 %) |
-| **Fleet** compressor energy | 8128 kWh | 8346 kWh (+2.7 %) |
-| Mean fleet COP | 3.67 | 3.64 (−0.8 %) |
-
-A 180 kW satellite takes 10 % off the *central* machine, which is what defers a plant expansion,
-but the *fleet* peak barely moves and fleet energy rises, because the satellite is a smaller, less
-efficient machine. **A satellite plant moves duty; it does not create it.** It earns its place
-when it defers central capacity, avoids pumping and pipe gain on a long index run, or sits
-somewhere its condenser runs cooler. Not automatically.
-
----
-
-## Testing
-
-```bash
-pip install -e ".[dev]"
-pytest                      # 459 tests
-pytest -m "not slow"        # unit tests only
-```
-
-The suite covers the heat-transfer physics in closed form, exact RC integration and comfort-band
-enforcement, storage state-of-charge conservation, flexibility metric arithmetic, branching
-topology and its degrees of freedom, layout geometry in metres, the scenario defaults and the
-command line, the reporting module against scenarios with no store, no envelope and no time
-series at all, a cross-check of the closed-form pipe conductance against TESPy's own buried and
-surface groups, and an end-to-end check that every shipped scenario reaches a converged design
-point with a chilled-water energy balance that closes to under 1 W.
-
----
-
 ## Contributing
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull
@@ -275,16 +172,3 @@ request.
 
 MIT, see [LICENSE](LICENSE).
 
-## Citation
-
-If you use DisCoolPy in academic work, please cite:
-
-```bibtex
-@article{Algarei2026DisCoolPy,
-  title   = {DisCoolPy: A modular Python framework for district cooling network
-             simulation with distributed heat gains and flexibility assessment},
-  author  = {Algarei, Anas},
-  journal = {SoftwareX},
-  year    = {2026}
-}
-```
