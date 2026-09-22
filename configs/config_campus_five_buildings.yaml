@@ -1,0 +1,224 @@
+metadata:
+  name: config_campus_five_buildings
+  description: >
+    Five-building mixed-use campus. Exists to prove the tool is genuinely modular: the branch,
+    the profile generator, the hydraulic checker and the heat-gain models all scale to any number
+    of buildings, and pipes can mix buried and above-ground sections in the same network. The
+    pre-upgrade profile generator raised outright unless there were exactly three buildings.
+
+# ---------------------------------------------------------------------------
+# Degrees of freedom, n = 5 buildings
+# ---------------------------------------------------------------------------
+# Pressure : 2n = 10 elements may fix a drop. Fixed: 5 supply + 5 return pipes.
+#            Free: the bypass valve and all 5 building legs (n + 1 = 6).
+# Energy   : all 10 pipes carry a UA heat model; the chiller duty is the single
+#            free energy variable (plant_control: supply_temperature).
+# ---------------------------------------------------------------------------
+
+network:
+  chilled_water_cycle_closer: chilled water cycle closer
+
+design:
+  supply_temperature_degC: 7.0
+  building_return_temperature_degC: 13.5
+  ambient_temperature_degC: 41.0
+  ground_temperature_degC: 30.5
+  condenser_inlet_temperature_degC: 35.0
+  condenser_outlet_temperature_degC: 40.5
+  chilled_water_pressure_bar: 7.0
+  condenser_pressure_bar: 3.0
+  pump_power_W: 27500.0
+  pump_efficiency: 0.74
+  bypass_mass_flow_kg_s: 0.15
+  cp_water_J_kgK: 4180.0
+  plant_control: supply_temperature
+
+chiller:
+  label: campus_chiller
+  T_evap_degC: 2.0
+  T_cond_degC: 45.0
+  eta_s: 0.78
+  refrigerant: R134a
+  pressure_ratios:
+    evap_1: 0.999
+    evap_2: 0.999
+    cond_1: 0.999
+    cond_2: 1.0
+  native_offdesign:
+    enabled: true
+    evaporator_ttd_l: null
+    condenser_ttd_u: null
+    use_pressure_loss_characteristics: false
+
+cooling_tower:
+  label: campus cooling tower
+  fluid:
+    water: 1.0
+  pr: null
+  approach_temperature_K: -6.0
+  native_offdesign: false
+  start_mass_flow_kg_s: 90.0
+
+buildings:
+  - label: admin block
+    Q_design_W: 280000.0
+    pr: null
+    archetype: office
+  - label: teaching hospital
+    Q_design_W: 520000.0
+    pr: null
+    archetype: hospital
+  - label: student residence
+    Q_design_W: 310000.0
+    pr: null
+    archetype: residential
+  - label: retail centre
+    Q_design_W: 240000.0
+    pr: null
+    archetype: retail
+  - label: data hall
+    Q_design_W: 400000.0
+    pr: null
+    archetype: datacentre
+
+branch:
+  label: campus
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: darcy
+  fix_pump_power: false
+  # Sized so the index (last) building keeps ~0.7 bar of valve authority.
+  # Below ~1.35 the round-trip pipe friction exceeds the head and the far end
+  # cannot be served. Branch.pressure_feasibility() reports that explicitly.
+  pump_pressure_ratio: 1.45
+  bypass_dp: null
+
+  heat_model: ua
+  thermal_defaults:
+    placement: buried
+    insulation: pur
+    insulation_thickness_m: 0.05
+    burial_depth_m: 1.4
+    ground: dry soil          # arid campus: dry soil insulates better than moist
+    pipe_wall_thickness_m: 0.007
+    twin_spacing_m: 0.8
+    ambient_source: ground
+
+  # Plan-view geometry. heading_deg is a bearing in degrees counter-clockwise
+  # from east; it changes nothing the solver sees, and lets discoolpy.layout
+  # draw the campus road as it actually runs.
+  origin_m: [0.0, 0.0]
+  heading_deg: 0
+
+  pipes:
+    supply_1: {L: 620.0, D: 0.25, ks: 0.00005, heading_deg: 0}    # 64.6 kg/s
+    supply_2: {L: 380.0, D: 0.225, ks: 0.00005, heading_deg: -30} # 54.2 kg/s
+    # The service-tunnel run to the residence is above ground: it tracks dry-bulb
+    # air rather than soil, and picks up far more heat per metre on a hot
+    # afternoon. Mixing placements in one network is the realistic case.
+    supply_3:
+      L: 260.0
+      D: 0.20                                     # 35.1 kg/s -> 1.12 m/s
+      ks: 0.00005
+      placement: surface
+      ambient_source: air
+      insulation_thickness_m: 0.06
+      wind_velocity_m_s: 0.4
+      heading_deg: 20
+    supply_4: {L: 300.0, D: 0.16, ks: 0.00005, heading_deg: 55}   # 23.7 kg/s
+    supply_5: {L: 340.0, D: 0.125, ks: 0.00005, heading_deg: 10}  # 14.9 kg/s
+    return_5: {L: 340.0, D: 0.125, ks: 0.00005}
+    return_4: {L: 300.0, D: 0.16, ks: 0.00005}
+    return_3:
+      L: 260.0
+      D: 0.20
+      ks: 0.00005
+      placement: surface
+      ambient_source: air
+      insulation_thickness_m: 0.06
+      wind_velocity_m_s: 0.4
+    return_2: {L: 380.0, D: 0.225, ks: 0.00005}
+    return_1: {L: 620.0, D: 0.25, ks: 0.00005}
+
+storage:
+  enabled: true
+  label: chilled_water_store
+  storage_type: chilled_water
+  # capacity_kWh is ignored for a stratified tank: the geometry and the
+  # temperature span below determine it (425 m3 over a 6.5 K span = 3200 kWh).
+  # The scalar model let these disagree; this one does not.
+  capacity_kWh: 3200.0
+  initial_soc: 0.67          # the cyclic steady state for this target and horizon
+  max_charge_kW: 420.0
+  max_discharge_kW: 420.0
+  charge_efficiency: 0.97      # sensible storage: no phase-change penalty
+  discharge_efficiency: 0.97
+  coupling: hydraulic
+  hydraulic_pr: 0.998
+  loss_model: ua
+
+  # ---- Stratified tank -----------------------------------------------------
+  # A chilled-water store has no membrane: cold water sits at the bottom because
+  # it is denser, warm return floats on top, and only a thermocline separates
+  # them. Resolving the tank into layers makes the temperature at the cold port
+  # a model OUTPUT, so the store stops delivering useful cooling when the
+  # thermocline reaches the outlet, which is well before its state of charge
+  # reaches zero. A scalar store cannot express that and will overstate the
+  # usable capacity.
+  #
+  # The tank owns its standing loss layer by layer, so no separate 'thermal'
+  # block is needed and loss_model must stay 'ua'.
+  stratified:
+    enabled: true
+    volume_m3: 425.0           # sized to the 3200 kWh this scenario intends
+    layers: 14                 # ~1 m per layer; below ~6 the thermocline is
+                               # wider than the discretisation can represent
+    height_to_diameter: 2.6    # tall and slender stratifies better
+    # These MUST match what the network actually circulates: the plant supplies
+    # 7.0 degC and the buildings return 13.5 degC, so the tank cannot charge
+    # colder than 7 nor discharge warmer than 13.5. A scalar store tolerated a
+    # mismatch here because the temperatures only drove its UA; a stratified one
+    # would simply go isothermal and stop working.
+    charged_temperature_degC: 7.0
+    discharged_temperature_degC: 13.5
+    wall_htc_W_m2K: 0.22       # 150 mm mineral wool
+  # Largest flow the tank's diffusers can pass without destroying the
+  # thermocline. Roughly 420 kW across the 6.5 K span.
+  max_tank_flow_kg_s: 15.5
+  # Near the mean plant duty (~1380 kW), not the peak: aim too high and the
+  # store charges nearly every hour, saturates and stops cycling.
+  target_chiller_load_kW: 1420.0
+  min_soc: 0.05
+  max_soc: 0.95
+
+profiles:
+  start: '2026-08-10 00:00:00'
+  periods: 144                 # 3 days at 30 min
+  freq: 30min
+  daily_high_degC: [41.0, 42.5, 40.0]
+  daily_low_degC: [28.0, 29.0, 27.5]
+  peak_solar_W_m2: 900.0
+  ground:
+    depth_m: 1.4
+    mean_annual_degC: 25.0
+    annual_amplitude_K: 10.0
+
+economics:
+  tariff: 0.11
+  carbon_intensity_kg_kWh: 0.48
+
+solver:
+  iterinfo: false
+  max_iter: 300
+  progress_interval: 24
+  initial_pressure_step_bar: 0.10
+
+outputs:
+  output_dir: ../outputs/campus_five_buildings
+  profile_csv: input_profile.csv
+  without_storage_csv: without_storage_results.csv
+  with_storage_csv: with_storage_results.csv
+  comparison_csv: storage_comparison_timeseries.csv
+  summary_md: flexibility_summary.md
+  plot_png: storage_comparison_results.png

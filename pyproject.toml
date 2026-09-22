@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discoolpy"
+version = "1.0.0"
+description = "District cooling network simulation on TESPy: branching street networks, heat gains in pipes, buildings and cold storage, and flexibility assessment."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Anas Algarei", email = "anas.algarei@gmail.com" }]
+maintainers = [{ name = "Anas Algarei", email = "anas.algarei@gmail.com" }]
+keywords = [
+    "district cooling",
+    "thermal energy storage",
+    "TESPy",
+    "energy flexibility",
+    "demand response",
+    "building energy",
+    "chilled water",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "tespy>=0.9.16",
+    "CoolProp>=6.4",
+    "numpy>=1.21",
+    "pandas>=1.5",
+    "matplotlib>=3.5",
+    "pyyaml>=6.0",
+    "scipy>=1.7",
+]
+
+[project.optional-dependencies]
+notebooks = ["jupyter>=1.0", "nbconvert>=7.0"]
+dev = ["pytest>=7.0", "black", "flake8"]
+docs = [
+    "sphinx>=7.0",
+    "myst-parser>=2.0",
+    "sphinx-rtd-theme>=2.0",
+    "sphinx-copybutton>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/AnasAlgarei/discoolpy"
+Documentation = "https://discoolpy.readthedocs.io/"
+Source = "https://github.com/AnasAlgarei/discoolpy"
+Issues = "https://github.com/AnasAlgarei/discoolpy/issues"
+Changelog = "https://github.com/AnasAlgarei/discoolpy/blob/main/CHANGELOG.md"
+
+[project.scripts]
+discoolpy = "discoolpy.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["discoolpy*"]
+exclude = ["tests*", "docs*", "examples*", "outputs*"]
+
+[tool.setuptools.package-data]
+discoolpy = ["templates/*.yaml"]
+
+[tool.black]
+line-length = 96
+target-version = ["py39"]

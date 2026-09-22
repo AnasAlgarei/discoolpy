@@ -19,8 +19,8 @@ conda activate discoolpy
 pip install -e ".[dev]"
 
 # 4. Verify everything works
-python -c "import discoolpy; print('OK')"
-cd examples && jupyter nbconvert --to notebook --execute tutorial_dummy_data.ipynb
+pytest                       # 459 tests, about a minute
+discoolpy check --all        # every shipped scenario solves at its design point
 ```
 
 ---
@@ -47,7 +47,7 @@ The project follows these conventions:
 
 **Component wrappers.** New components should follow the pattern established by `building.py` and `branch.py`: a `@dataclass` with `__post_init__` for TESPy component creation, `connect_between` for connection assembly, `set_design` for design-mode parameters, and `set_demand` or equivalent for offdesign updates.
 
-**YAML schema.** New configuration keys should be documented in `docs/api_reference.md` and demonstrated in a new or updated YAML file in `configs/`.
+**YAML schema.** A new configuration key has to be added to `SCENARIO_KEYS` in `discoolpy/config_schema.py`, or `validate_scenario` will warn about it wherever it is used. Document it in `docs/configuration.md` and demonstrate it in a new or updated YAML file in `configs/`. `tests/test_validation.py` asserts that every shipped scenario validates with no warnings, so a key added to the code and forgotten in the map turns the suite red.
 
 ---
 
@@ -56,8 +56,9 @@ The project follows these conventions:
 1. Create `discoolpy/my_component.py` following the dataclass pattern.
 2. Export it from `discoolpy/__init__.py`.
 3. Add a section to `docs/api_reference.md` describing the class, parameters, and usage.
-4. Add a YAML key to the schema documentation in `docs/getting_started.md`.
-5. Demonstrate the component in a new example script or extend an existing one.
+4. Add its YAML keys to `SCENARIO_KEYS` and to `docs/configuration.md`.
+5. Give it a report section or a figure panel in `discoolpy/reporting.py` if it produces results worth seeing.
+6. Demonstrate the component in a new example script or extend an existing one.
 
 ---
 
@@ -65,11 +66,14 @@ The project follows these conventions:
 
 Before opening a pull request, confirm the following:
 
+- `pytest` passes, and each test file passes on its own.
+- `discoolpy check --all --strict` exits zero.
 - The tutorial notebook (`examples/tutorial_dummy_data.ipynb`) executes without errors.
 - All new public functions have docstrings and type hints.
-- New YAML keys are documented in `docs/api_reference.md`.
-- The `environment.yml` and `setup.py` are updated if new dependencies are added.
+- New YAML keys are in `SCENARIO_KEYS` and documented in `docs/configuration.md`.
+- The `environment.yml` and `pyproject.toml` are updated if new dependencies are added.
 - The `README.md` feature table is updated if a new capability is added.
+- `CHANGELOG.md` has an entry.
 
 ---
 

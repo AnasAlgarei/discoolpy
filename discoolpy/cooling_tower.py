@@ -1,10 +1,9 @@
-"""
-Reusable TESPy cooling tower module for a chiller condenser-water loop.
+"""Reusable TESPy cooling tower module for a chiller condenser-water loop.
 
-The CoolingTower class wraps a SimpleHeatExchanger and a CycleCloser. It creates
-all condenser-water connections to a chiller-like component with ports ``in2``
-and ``out2``. The tower is intentionally modeled as an external heat sink; TESPy
-calculates the tower heat rejection from the closed-loop energy balance.
+A CoolingTower wraps a SimpleHeatExchanger and a CycleCloser, and makes every
+condenser-water connection to a chiller-like component with ``in2`` and
+``out2`` ports. The tower is modelled as an external heat sink, so TESPy works
+the heat rejection out from the closed-loop energy balance.
 """
 
 from __future__ import annotations

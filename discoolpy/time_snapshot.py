@@ -1,11 +1,10 @@
-"""
-Reusable time snapshot utilities for modular TESPy district cooling models.
+"""Time snapshot utilities for modular TESPy district cooling models.
 
-The classes in this module intentionally do not create TESPy components. They
-represent time-dependent operating data and provide an ``apply`` method that
-updates already-created modular Building, Chiller, and CoolingTower instances
-before each steady-state solve. This keeps the network topology unchanged while
-making both load and ambient operating conditions time-dependent.
+Nothing here creates a TESPy component. These classes hold time-dependent
+operating data and expose an ``apply`` method that updates Building, Chiller
+and CoolingTower instances that already exist, just before each steady-state
+solve. The network topology never changes; only the loads and the ambient
+conditions do.
 """
 
 from __future__ import annotations
@@ -112,6 +111,16 @@ class TimeSnapshot:
         cooling-tower leaving-water temperature. If omitted, compatible cooling
         tower wrappers may derive it from ``ambient_temperature`` and their
         configured approach.
+    ground_temperature:
+        Undisturbed soil temperature in degC at pipe burial depth. Buried
+        district-cooling mains see the ground, not the air: soil at 1-2 m lags
+        the surface by weeks and swings by a fraction of the air amplitude, so
+        driving buried pipes with dry-bulb air overstates the daily variation in
+        pipe heat gain considerably. Falls back to ``ambient_temperature`` when
+        omitted.
+    solar_irradiance_W_m2:
+        Global irradiance on the reference surface, used by building envelope
+        models with a non-zero solar aperture.
     metadata:
         Optional additional variables such as relative humidity, wet-bulb
         temperature, electricity price, or operator notes.
@@ -122,6 +131,8 @@ class TimeSnapshot:
     resolution: Union[str, timedelta, int, float] = "hourly"
     ambient_temperature: Optional[float] = None
     condenser_inlet_temperature: Optional[float] = None
+    ground_temperature: Optional[float] = None
+    solar_irradiance_W_m2: Optional[float] = None
     metadata: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -132,14 +143,31 @@ class TimeSnapshot:
             "building_loads",
             {str(label): float(q) for label, q in self.building_loads.items()},
         )
-        if self.ambient_temperature is not None:
-            object.__setattr__(self, "ambient_temperature", float(self.ambient_temperature))
-        if self.condenser_inlet_temperature is not None:
-            object.__setattr__(
-                self,
-                "condenser_inlet_temperature",
-                float(self.condenser_inlet_temperature),
-            )
+        for attribute in (
+            "ambient_temperature",
+            "condenser_inlet_temperature",
+            "ground_temperature",
+            "solar_irradiance_W_m2",
+        ):
+            value = getattr(self, attribute)
+            if value is not None:
+                object.__setattr__(self, attribute, float(value))
+        # Building envelopes read irradiance out of metadata, so mirror it there
+        # unless the caller already supplied a per-building override.
+        if self.solar_irradiance_W_m2 is not None:
+            metadata = dict(self.metadata or {})
+            metadata.setdefault("solar_irradiance_W_m2", self.solar_irradiance_W_m2)
+            object.__setattr__(self, "metadata", metadata)
+
+    @property
+    def resolution_hours(self) -> float:
+        """Snapshot duration in hours."""
+        return self.resolution.total_seconds() / 3600.0
+
+    @property
+    def pipe_ambient_temperature(self) -> Optional[float]:
+        """Driving temperature for buried pipes: ground if given, else air."""
+        return self.ground_temperature if self.ground_temperature is not None else self.ambient_temperature
 
     @property
     def total_building_load(self) -> float:
@@ -160,39 +188,70 @@ class TimeSnapshot:
         update_chiller: bool = True,
         update_cooling_tower: bool = True,
         chiller_load_offset_W: float = 0.0,
+        branch: Optional[object] = None,
+        storage: Optional[object] = None,
+        storage_result: Optional[object] = None,
     ) -> float:
         """Apply this snapshot to compatible modular model objects.
 
         ``buildings`` can be a mapping of labels to Building instances or a
         sequence of Building instances. The method calls ``set_snapshot_demand``
         when available and otherwise updates ``building.component.Q`` directly.
-        If ``chiller`` provides ``update_Q_evap``, the chiller evaporator duty is
-        updated to the sum of all building heat gains plus
-        ``chiller_load_offset_W``. If ``cooling_tower`` provides
-        ``apply_snapshot`` or ``set_offdesign_ambient``, ambient and
-        condenser-water fields are applied before the network solve.
+
+        ``update_chiller`` asserts the evaporator duty as
+        ``sum(applied building duties) + chiller_load_offset_W``. Set it False
+        (or release the duty via :meth:`Chiller.release_Q_evap`) whenever the
+        chilled-water loop also carries pipe heat gains or a hydraulically
+        coupled store. The plant duty then comes out of the loop instead.
+
+        ``branch`` receives the snapshot's ground/air temperatures so pipe heat
+        gains track the weather, and passes the weather on to the condenser-water
+        loop of every satellite plant in the tree. ``storage`` with
+        ``storage_result`` pushes a dispatch decision onto a hydraulically
+        coupled store.
+
+        Returns the total *applied* building duty in W, which differs from
+        ``total_building_load`` whenever a building uses an envelope or
+        thermal-mass load model (there the snapshot value is only the internal
+        gain).
         """
         if isinstance(buildings, Mapping):
             building_items = list(buildings.items())
         else:
             building_items = [(getattr(b, "label", None), b) for b in buildings]
 
+        applied_total = 0.0
         for label, building in building_items:
             if label is None:
                 raise ValueError("Every building must expose a 'label' attribute.")
             q = self.get_building_load(str(label))
             if hasattr(building, "set_snapshot_demand"):
-                building.set_snapshot_demand(self)
+                applied_total += float(building.set_snapshot_demand(self))
             elif hasattr(building, "component"):
                 building.component.set_attr(Q=q)
+                applied_total += q
             else:
                 raise TypeError(f"Object for '{label}' is not a supported Building instance.")
 
-        total_q = self.total_building_load
+        if branch is not None and hasattr(branch, "apply_ambient"):
+            branch.apply_ambient(
+                ground_temperature_degC=self.pipe_ambient_temperature,
+                air_temperature_degC=self.ambient_temperature,
+            )
+        # Satellite plants have their own condenser-water loops, which see the
+        # same weather as the main tower.
+        if branch is not None and hasattr(branch, "apply_snapshot"):
+            branch.apply_snapshot(self)
+
+        if storage is not None and storage_result is not None:
+            if not hasattr(storage, "apply_dispatch_to_network"):
+                raise TypeError("storage must provide apply_dispatch_to_network(result).")
+            storage.apply_dispatch_to_network(storage_result)
+
         if update_chiller and chiller is not None:
             if not hasattr(chiller, "update_Q_evap"):
                 raise TypeError("Chiller object must provide update_Q_evap(new_Q_W).")
-            chiller.update_Q_evap(total_q + float(chiller_load_offset_W))
+            chiller.update_Q_evap(applied_total + float(chiller_load_offset_W))
 
         if update_cooling_tower and cooling_tower is not None:
             if hasattr(cooling_tower, "apply_snapshot"):
@@ -207,7 +266,7 @@ class TimeSnapshot:
                     "Cooling tower object must provide apply_snapshot(snapshot) or "
                     "set_offdesign_ambient(...)."
                 )
-        return total_q
+        return applied_total
 
     def to_record(self) -> Dict[str, object]:
         """Return a flat record suitable for CSV or pandas export."""
@@ -217,6 +276,8 @@ class TimeSnapshot:
             "total_building_load_W": self.total_building_load,
             "ambient_temperature_degC": self.ambient_temperature,
             "condenser_inlet_temperature_degC": self.condenser_inlet_temperature,
+            "ground_temperature_degC": self.ground_temperature,
+            "solar_irradiance_W_m2": self.solar_irradiance_W_m2,
         }
         for label, q in self.building_loads.items():
             record[f"{label}_Q_W"] = q
@@ -252,6 +313,8 @@ class SnapshotSchedule:
         name: str = "profile_schedule",
         ambient_temperatures: Optional[Sequence[float]] = None,
         condenser_inlet_temperatures: Optional[Sequence[float]] = None,
+        ground_temperatures: Optional[Sequence[float]] = None,
+        solar_irradiances: Optional[Sequence[float]] = None,
         metadata_profile: Optional[Mapping[str, Sequence[object]]] = None,
     ) -> "SnapshotSchedule":
         """Create snapshots from equal-length demand, ambient, and metadata arrays."""
@@ -268,6 +331,10 @@ class SnapshotSchedule:
             raise ValueError("Ambient temperature profile must match the demand profile length.")
         if condenser_inlet_temperatures is not None and len(condenser_inlet_temperatures) != count:
             raise ValueError("Condenser inlet temperature profile must match the demand profile length.")
+        if ground_temperatures is not None and len(ground_temperatures) != count:
+            raise ValueError("Ground temperature profile must match the demand profile length.")
+        if solar_irradiances is not None and len(solar_irradiances) != count:
+            raise ValueError("Solar irradiance profile must match the demand profile length.")
         if metadata_profile is not None:
             for key, values in metadata_profile.items():
                 if len(values) != count:
@@ -294,6 +361,12 @@ class SnapshotSchedule:
                         if condenser_inlet_temperatures is None
                         else condenser_inlet_temperatures[idx]
                     ),
+                    ground_temperature=(
+                        None if ground_temperatures is None else ground_temperatures[idx]
+                    ),
+                    solar_irradiance_W_m2=(
+                        None if solar_irradiances is None else solar_irradiances[idx]
+                    ),
                     metadata=metadata,
                 )
             )
@@ -311,6 +384,8 @@ class SnapshotSchedule:
         name: Optional[str] = None,
         ambient_column: Optional[str] = None,
         condenser_inlet_column: Optional[str] = None,
+        ground_column: Optional[str] = None,
+        solar_column: Optional[str] = None,
         metadata_columns: Optional[Mapping[str, str]] = None,
     ) -> "SnapshotSchedule":
         """Create snapshots from a CSV file with one demand column per building.
@@ -329,6 +404,10 @@ class SnapshotSchedule:
                 required.append(ambient_column)
             if condenser_inlet_column is not None:
                 required.append(condenser_inlet_column)
+            if ground_column is not None:
+                required.append(ground_column)
+            if solar_column is not None:
+                required.append(solar_column)
             if metadata_columns:
                 required.extend(metadata_columns.values())
             missing = [column for column in required if column not in (reader.fieldnames or [])]
@@ -357,6 +436,12 @@ class SnapshotSchedule:
                             if condenser_inlet_column is None
                             else float(row[condenser_inlet_column])
                         ),
+                        ground_temperature=(
+                            None if ground_column is None else float(row[ground_column])
+                        ),
+                        solar_irradiance_W_m2=(
+                            None if solar_column is None else float(row[solar_column])
+                        ),
                         metadata=metadata,
                     )
                 )
@@ -371,8 +456,11 @@ class SnapshotSchedule:
         update_chiller: bool = True,
         update_cooling_tower: bool = True,
         chiller_load_offset_W: float = 0.0,
+        branch: Optional[object] = None,
+        storage: Optional[object] = None,
+        storage_result: Optional[object] = None,
     ) -> float:
-        """Apply the snapshot at ``index`` and return total building load in W."""
+        """Apply the snapshot at ``index`` and return the applied building duty in W."""
         return self.snapshots[index].apply(
             buildings,
             chiller,
@@ -380,6 +468,9 @@ class SnapshotSchedule:
             update_chiller=update_chiller,
             update_cooling_tower=update_cooling_tower,
             chiller_load_offset_W=chiller_load_offset_W,
+            branch=branch,
+            storage=storage,
+            storage_result=storage_result,
         )
 
     def records(self) -> List[Dict[str, object]]:

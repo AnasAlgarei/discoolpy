@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+title: "DisCoolPy: district cooling network simulation on TESPy"
+message: "If you use this software, please cite it using these metadata."
+type: software
+version: 1.0.0
+date-released: "2026-09-21"
+license: MIT
+repository-code: "https://github.com/AnasAlgarei/discoolpy"
+url: "https://discoolpy.readthedocs.io/"
+abstract: >-
+  DisCoolPy is an open-source Python framework for district cooling network
+  simulation, built on TESPy. It models a network as a tree of street branches
+  and resolves heat gain wherever it occurs: buried and exposed pipes from
+  geometry and insulation, weather-driven building envelopes, and ambient-driven
+  cold storage. Pipe conductances are handed to TESPy's native UA group, so each
+  duty is solved simultaneously with the water temperatures rather than assumed.
+  Pressure and energy degrees of freedom across the whole tree are checked as
+  graphs before any component is built. A scenario is a single YAML file, and
+  four commands define, check, run and report on it.
+authors:
+  - family-names: Algarei
+    given-names: Anas
+    email: anas.algarei@gmail.com
+keywords:
+  - district cooling
+  - thermal energy storage
+  - energy flexibility
+  - demand response
+  - TESPy
+  - building energy simulation
+references:
+  - type: software
+    title: "TESPy: Thermal Engineering Systems in Python"
+    authors:
+      - family-names: Witte
+        given-names: Francesco
+      - family-names: Tuschy
+        given-names: Ilja
+    doi: 10.21105/joss.02178
+    year: 2020

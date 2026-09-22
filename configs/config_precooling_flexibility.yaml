@@ -1,0 +1,216 @@
+metadata:
+  name: config_precooling_flexibility
+  description: >
+    Demand-side flexibility scenario. The three buildings carry an envelope model
+    (UA, solar aperture, infiltration) and a first-order thermal-mass model, so their cooling
+    demand responds to weather and the zones can be pre-cooled within a comfort band. The
+    distribution pipes gain heat from the soil. There is no cold store: the flexibility here is
+    entirely in the buildings, which is the lever most often ignored because a scalar Q cannot
+    express it.
+
+# ---------------------------------------------------------------------------
+# How the building load is built up
+# ---------------------------------------------------------------------------
+# With load_model: thermal_mass, the number in the demand profile is the
+# INTERNAL gain only. The delivered cooling comes out of the zone energy balance
+#
+#     C dT/dt = UA_env*(T_air - T) + solar + internal - Q_cool
+#
+# integrated exactly over each snapshot. The control mode per snapshot is read
+# from snapshot metadata:
+#   'track'   hold the setpoint          (the inflexible reference)
+#   'precool' cool to the band floor     (absorb energy ahead of the peak)
+#   'coast'   deliver nothing            (shed load, drift to the band ceiling)
+# Comfort is a hard constraint: 'coast' still spends whatever cooling is needed
+# to stay under max_temperature_degC, so the reported flexibility is deliverable
+# rather than nameplate.
+# ---------------------------------------------------------------------------
+
+network:
+  chilled_water_cycle_closer: chilled water cycle closer
+
+design:
+  supply_temperature_degC: 6.5
+  building_return_temperature_degC: 13.0
+  ambient_temperature_degC: 43.0
+  ground_temperature_degC: 29.5
+  condenser_inlet_temperature_degC: 36.0
+  condenser_outlet_temperature_degC: 41.0
+  chilled_water_pressure_bar: 5.5
+  condenser_pressure_bar: 3.0
+  pump_power_W: 8900.0
+  pump_efficiency: 0.72
+  bypass_mass_flow_kg_s: 0.10
+  cp_water_J_kgK: 4180.0
+  plant_control: supply_temperature
+
+chiller:
+  label: precooling_chiller
+  T_evap_degC: 1.5
+  T_cond_degC: 45.0
+  eta_s: 0.75
+  refrigerant: R134a
+  pressure_ratios:
+    evap_1: 0.999
+    evap_2: 0.999
+    cond_1: 0.999
+    cond_2: 1.0
+  native_offdesign:
+    enabled: true
+    evaporator_ttd_l: null
+    condenser_ttd_u: null
+    use_pressure_loss_characteristics: false
+
+cooling_tower:
+  label: precooling cooling tower
+  fluid:
+    water: 1.0
+  pr: null
+  approach_temperature_K: -7.0
+  native_offdesign: false
+  start_mass_flow_kg_s: 55.0
+
+buildings:
+  - label: office tower
+    Q_design_W: 345000.0        # = peak envelope demand; see docs/heat_gains.md
+    pr: null
+    archetype: office
+    load_model: thermal_mass
+    envelope:
+      UA_W_K: 6200.0            # ~0.30 W/m2K over a 21 000 m2 envelope
+      solar_aperture_m2: 125.0  # effective aperture x SHGC
+      infiltration_kg_s: 2.2
+      indoor_setpoint_degC: 23.5
+    thermal_mass:
+      capacitance_MJ_K: 420.0   # heavyweight concrete frame; tau ~ 19 h
+      min_temperature_degC: 20.5
+      max_temperature_degC: 26.0
+      max_cooling_W: 400000.0        # terminal-unit limit, above peak demand
+      precool_max_cooling_W: 300000.0  # gentler cap while pre-cooling, so the
+                                       # pre-cool block does not become the new peak
+
+  - label: hotel
+    Q_design_W: 245000.0
+    pr: null
+    archetype: hotel
+    load_model: thermal_mass
+    envelope:
+      UA_W_K: 4800.0
+      solar_aperture_m2: 70.0
+      infiltration_kg_s: 1.8
+      indoor_setpoint_degC: 23.0
+    thermal_mass:
+      capacitance_MJ_K: 300.0
+      min_temperature_degC: 21.0
+      max_temperature_degC: 25.0   # guests tolerate less drift than offices
+      max_cooling_W: 290000.0
+      precool_max_cooling_W: 215000.0
+
+  - label: retail podium
+    Q_design_W: 255000.0
+    pr: null
+    archetype: retail
+    load_model: thermal_mass
+    envelope:
+      UA_W_K: 4100.0
+      solar_aperture_m2: 95.0
+      infiltration_kg_s: 2.6       # large door-opening losses
+      indoor_setpoint_degC: 24.0
+    thermal_mass:
+      capacitance_MJ_K: 150.0      # lightweight fit-out; tau ~ 10 h
+      min_temperature_degC: 21.5
+      max_temperature_degC: 26.5
+      max_cooling_W: 300000.0
+      precool_max_cooling_W: 225000.0
+
+branch:
+  label: campus
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: darcy
+  fix_pump_power: false
+  # Sized so the index (last) building keeps ~0.7 bar of valve authority.
+  # Below ~1.35 the round-trip pipe friction exceeds the head and the far end
+  # cannot be served. Branch.pressure_feasibility() reports that explicitly.
+  pump_pressure_ratio: 1.45
+  bypass_dp: null
+
+  heat_model: ua
+  thermal_defaults:
+    placement: buried
+    insulation: pur
+    insulation_thickness_m: 0.05
+    burial_depth_m: 1.2
+    ground: moist soil
+    pipe_wall_thickness_m: 0.006
+    twin_spacing_m: 0.7
+    ambient_source: ground
+
+  pipes:
+    supply_1: {L: 550.0, D: 0.175, ks: 0.00005}   # 31.2 kg/s -> 1.30 m/s
+    supply_2: {L: 320.0, D: 0.14, ks: 0.00005}    # 18.5 kg/s -> 1.20 m/s
+    supply_3: {L: 240.0, D: 0.100, ks: 0.00005}   #  9.5 kg/s -> 1.21 m/s
+    return_3: {L: 240.0, D: 0.100, ks: 0.00005}
+    return_2: {L: 320.0, D: 0.14, ks: 0.00005}
+    return_1: {L: 550.0, D: 0.175, ks: 0.00005}
+
+storage:
+  enabled: false     # the point of this scenario is building-side flexibility
+
+profiles:
+  start: '2026-07-06 00:00:00'
+  periods: 96        # 2 days at 30 min
+  freq: 30min
+  daily_high_degC: [44.0, 45.0]
+  daily_low_degC: [30.0, 31.0]
+  peak_solar_W_m2: 980.0
+  # With thermal-mass buildings the profile carries INTERNAL gains only, so the
+  # generator's output is scaled down to a plausible internal-gain fraction of
+  # the design load by the example script.
+  ground:
+    depth_m: 1.2
+    mean_annual_degC: 25.0
+    annual_amplitude_K: 10.0
+
+economics:
+  tariff:
+    0: 0.05
+    1: 0.05
+    2: 0.05
+    3: 0.05
+    4: 0.05
+    5: 0.05
+    6: 0.08
+    7: 0.08
+    8: 0.08
+    9: 0.08
+    10: 0.12
+    11: 0.12
+    12: 0.28
+    13: 0.28
+    14: 0.28
+    15: 0.28
+    16: 0.28
+    17: 0.28
+    18: 0.12
+    19: 0.12
+    20: 0.12
+    21: 0.08
+    22: 0.05
+    23: 0.05
+  carbon_intensity_kg_kWh: 0.55
+
+solver:
+  iterinfo: false
+  max_iter: 300
+  progress_interval: 24
+  initial_pressure_step_bar: 0.08
+
+outputs:
+  output_dir: ../outputs/precooling_flexibility
+  profile_csv: input_profile.csv
+  baseline_csv: setpoint_tracking_results.csv
+  flexible_csv: precooling_results.csv
+  summary_md: precooling_flexibility_summary.md
+  plot_png: precooling_results.png

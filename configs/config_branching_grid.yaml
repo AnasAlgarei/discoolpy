@@ -1,0 +1,304 @@
+metadata:
+  name: config_branching_grid
+  description: >
+    A district cooling network laid out on a street grid that forks. The trunk leaves the
+    central plant heading east, serves two buildings, and splits at the first junction into a
+    north spur and an east spur. The east spur forks again: one leg carries on south to a
+    dead-end bypass, the other feeds a satellite plant with its own chiller, cooling tower and
+    chilled-water store. Six buildings, four branches, three kinds of terminal.
+
+# ---------------------------------------------------------------------------
+# Topology
+# ---------------------------------------------------------------------------
+#
+#   central plant
+#        |
+#   [downtown trunk]  city hall -> conference centre
+#        |
+#        +--(north)--> [north spur]  north tower -> teaching block --> bypass
+#        |
+#        +--(east) --> [east spur]   airport hotel
+#                           |
+#                           +--(south)--> [south leg]  exhibition hall --> bypass
+#                           |
+#                           +-----------> satellite plant (chiller + chilled-water store)
+#
+# ---------------------------------------------------------------------------
+# Degrees of freedom
+# ---------------------------------------------------------------------------
+# Pressure : 12 unknown pressure nodes (2 + 2 + 1 + 1 taps, supply and return).
+#            Fixed: all 12 pipes, from their Darcy geometry.
+#            Free : both end bypasses, the satellite's balancing valve, and every
+#                   building leg. A fork puts its terminals in parallel between
+#                   the same two nodes, so at most one of them may pin a drop.
+#                   Here none of them does, and each reports the balancing drop a
+#                   real valve would have to provide.
+# Energy   : all 12 pipes carry a UA heat model and the satellite duty is
+#            asserted, so the main chiller's duty is the single free energy
+#            variable (plant_control: supply_temperature).
+# ---------------------------------------------------------------------------
+
+network:
+  chilled_water_cycle_closer: chilled water cycle closer
+
+design:
+  supply_temperature_degC: 6.5
+  building_return_temperature_degC: 13.0
+  ambient_temperature_degC: 42.0
+  ground_temperature_degC: 31.0
+  condenser_inlet_temperature_degC: 35.0
+  condenser_outlet_temperature_degC: 40.5
+  chilled_water_pressure_bar: 7.5
+  condenser_pressure_bar: 3.0
+  pump_power_W: 18000.0
+  pump_efficiency: 0.75
+  bypass_mass_flow_kg_s: 0.0     # every bypass names its own flow below
+  cp_water_J_kgK: 4180.0
+  plant_control: supply_temperature
+
+chiller:
+  label: central_plant
+  T_evap_degC: 2.0
+  T_cond_degC: 45.0
+  eta_s: 0.78
+  refrigerant: R134a
+  pressure_ratios:
+    evap_1: 0.999
+    evap_2: 0.999
+    cond_1: 0.999
+    cond_2: 1.0
+  native_offdesign:
+    enabled: true
+    use_pressure_loss_characteristics: false
+
+cooling_tower:
+  label: central cooling tower
+  fluid:
+    water: 1.0
+  pr: null
+  approach_temperature_K: -7.0
+  native_offdesign: false
+  start_mass_flow_kg_s: 95.0
+
+# Buildings are defined once here and placed on a branch below. Within a branch
+# they are taken in the order the branch lists them, so the first name is the
+# first tap after the branch inlet.
+buildings:
+  - label: city hall
+    Q_design_W: 310000.0
+    pr: null
+    archetype: office
+  - label: conference centre
+    Q_design_W: 260000.0
+    pr: null
+    archetype: retail
+  - label: north tower
+    Q_design_W: 340000.0
+    pr: null
+    archetype: office
+  - label: teaching block
+    Q_design_W: 190000.0
+    pr: null
+    archetype: office
+  - label: airport hotel
+    Q_design_W: 420000.0
+    pr: null
+    archetype: hotel
+  - label: exhibition hall
+    Q_design_W: 230000.0
+    pr: null
+    archetype: retail
+
+branch:
+  label: downtown trunk
+  buildings: [city hall, conference centre]
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: darcy
+  fix_pump_power: false
+  # Enough head to reach the far end of the longest path (trunk -> east spur ->
+  # south leg) and still leave every building 0.35-1.2 bar of valve authority.
+  # At 1.16 the exhibition hall, which is the index run, can no longer be served, and
+  # Branch.pressure_feasibility() says so instead of leaving you to guess.
+  pump_pressure_ratio: 1.22
+
+  # Plan-view geometry. heading_deg is measured counter-clockwise from east, so
+  # 0 is +x and 90 is +y. It changes nothing the solver sees; it is what lets
+  # discoolpy.layout draw the network as the street grid it is.
+  origin_m: [0.0, 0.0]
+  heading_deg: 0
+
+  heat_model: ua
+  thermal_defaults:
+    placement: buried
+    insulation: pur
+    insulation_thickness_m: 0.05
+    burial_depth_m: 1.4
+    ground: dry soil
+    pipe_wall_thickness_m: 0.007
+    twin_spacing_m: 0.8
+    ambient_source: ground
+
+  pipes:
+    supply_1: {L: 520.0, D: 0.28, ks: 0.00005, heading_deg: 0}    # 64.3 kg/s -> 1.05 m/s
+    supply_2: {L: 340.0, D: 0.25, ks: 0.00005, heading_deg: 0}    # 52.9 kg/s -> 1.08 m/s
+    return_2: {L: 340.0, D: 0.25, ks: 0.00005}
+    return_1: {L: 520.0, D: 0.28, ks: 0.00005}
+
+  terminals:
+    # ---- the street turns north ------------------------------------------
+    - type: branch
+      label: north spur
+      buildings: [north tower, teaching block]
+      heading_deg: 90
+      pipes:
+        supply_1: {L: 300.0, D: 0.18, ks: 0.00005, heading_deg: 90}   # 19.6 kg/s
+        supply_2: {L: 260.0, D: 0.11, ks: 0.00005, heading_deg: 90}   # 7.1 kg/s
+        return_2: {L: 260.0, D: 0.11, ks: 0.00005}
+        return_1: {L: 300.0, D: 0.18, ks: 0.00005}
+      terminals:
+        - type: bypass
+          label: north dead end
+          m_kg_s: 0.08
+          dp: null            # free: this leg balances its own parallel path
+          heading_deg: 90
+
+    # ---- and carries on east ---------------------------------------------
+    - type: branch
+      label: east spur
+      buildings: [airport hotel]
+      heading_deg: 0
+      pipes:
+        supply_1: {L: 410.0, D: 0.22, ks: 0.00005, heading_deg: 0}    # 32.6 kg/s
+        return_1: {L: 410.0, D: 0.22, ks: 0.00005}
+      terminals:
+        # ---- one leg turns south to a dead end --------------------------
+        - type: branch
+          label: south leg
+          buildings: [exhibition hall]
+          heading_deg: -90
+          pipes:
+            supply_1:
+              L: 280.0
+              D: 0.13
+              ks: 0.00005
+              heading_deg: -90
+              # This run crosses a service bridge rather than being buried, so
+              # it tracks dry-bulb air and picks up far more heat per metre on a
+              # hot afternoon.
+              placement: surface
+              ambient_source: air
+              insulation_thickness_m: 0.06
+              wind_velocity_m_s: 0.6
+            return_1:
+              L: 280.0
+              D: 0.13
+              ks: 0.00005
+              placement: surface
+              ambient_source: air
+              insulation_thickness_m: 0.06
+              wind_velocity_m_s: 0.6
+          terminals:
+            - type: bypass
+              label: south dead end
+              m_kg_s: 0.06
+              dp: null
+              heading_deg: -90
+
+        # ---- the other feeds a distributed plant -------------------------
+        # A satellite plant takes a slipstream from the end of the line, cools
+        # it, and delivers it into the return header. It carries part of the
+        # district duty locally, so the central plant sees a colder return and a
+        # smaller evaporator load. Its duty is asserted rather than solved: the
+        # chilled-water loop has exactly one free energy variable and that is
+        # the central machine.
+        - type: plant
+          label: airport satellite
+          m_kg_s: 14.0           # slipstream: 180 kW over 14 kg/s is a 3.1 K drop
+          Q_evap_kW: 180.0       # design (and maximum) duty
+          dispatch: proportional # what it delivers follows the district's load
+          min_load_fraction: 0.35
+          dp: null               # balancing valve free
+          heading_deg: 0
+          chiller:
+            label: satellite_chiller
+            T_evap_degC: 1.0
+            T_cond_degC: 46.0
+            eta_s: 0.72
+            refrigerant: R134a
+            pressure_ratios:
+              evap_1: 0.999
+              evap_2: 0.999
+              cond_1: 0.999
+              cond_2: 1.0
+            native_offdesign:
+              enabled: true
+          cooling_tower:
+            label: satellite cooling tower
+            approach_temperature_K: -6.0
+          storage:
+            enabled: true
+            label: satellite_store
+            storage_type: chilled_water
+            capacity_kWh: 900.0
+            initial_soc: 0.5
+            max_charge_kW: 90.0
+            max_discharge_kW: 90.0
+            charge_efficiency: 0.97
+            discharge_efficiency: 0.97
+            coupling: hydraulic
+            hydraulic_pr: 0.999
+            loss_model: ua
+            thermal:
+              volume_m3: 700.0
+              insulation: mineral wool
+              insulation_thickness_m: 0.15
+              height_to_diameter: 1.6
+              buried_fraction: 0.2
+              storage_temperature_degC: 4.0
+              discharged_temperature_degC: 12.0
+              temperature_varies_with_soc: true
+            # Level the satellite's own output: charge when it is loafing,
+            # discharge when the district wants everything it has.
+            target_chiller_load_kW: 150.0
+            min_soc: 0.05
+            max_soc: 0.95
+
+# The central plant has no store of its own in this scenario: the point here is
+# the topology, and a second store would make it harder to see what the
+# satellite is doing.
+storage:
+  enabled: false
+
+profiles:
+  start: '2026-07-14 00:00:00'
+  periods: 96                  # 2 days at 30 min
+  freq: 30min
+  daily_high_degC: [42.0, 43.5]
+  daily_low_degC: [29.0, 30.0]
+  peak_solar_W_m2: 920.0
+  ground:
+    depth_m: 1.4
+    mean_annual_degC: 26.0
+    annual_amplitude_K: 10.0
+
+economics:
+  tariff: 0.11
+  carbon_intensity_kg_kWh: 0.48
+
+solver:
+  iterinfo: false
+  max_iter: 400
+  progress_interval: 24
+  initial_pressure_step_bar: 0.10
+
+outputs:
+  output_dir: ../outputs/branching_grid
+  profile_csv: input_profile.csv
+  without_storage_csv: without_storage_results.csv
+  with_storage_csv: with_storage_results.csv
+  comparison_csv: storage_comparison_timeseries.csv
+  summary_md: flexibility_summary.md
+  plot_png: branching_results.png
+  layout_png: network_layout.png

@@ -1,0 +1,32 @@
+# A DisCoolPy scenario, as short as one gets.
+#
+# This file runs as it stands. Change the numbers, then work through the four
+# steps; each one tells you the next:
+#
+#   discoolpy check  this_file.yaml    # design point, a few seconds
+#   discoolpy run    this_file.yaml    # the time series
+#   discoolpy report this_file.yaml    # the results, as figures
+#
+# `autofill: true` works out the pipe pressure ratios and the adiabatic pipe
+# duties for you. Everything the `design` section would normally hold falls
+# back to ordinary chilled-water values: 7 degC supply, 12 degC return,
+# 35 degC ambient. See `discoolpy new` without --minimal for the full set.
+
+metadata:
+  name: my_scenario
+  description: Replace this with what the scenario is for.
+
+branch:
+  autofill: true
+
+buildings:
+  - {label: building_1, Q_design_W: 150000.0}
+  - {label: building_2, Q_design_W: 150000.0}
+
+profiles:
+  start: '2026-07-01 00:00:00'
+  periods: 48          # 24 h at 30 min
+  freq: 30min
+
+outputs:
+  output_dir: outputs/my_scenario

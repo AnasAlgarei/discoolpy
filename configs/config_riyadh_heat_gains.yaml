@@ -1,0 +1,236 @@
+metadata:
+  name: config_riyadh_heat_gains
+  description: >
+    Three-building Riyadh district-cooling network with heat gains accounted for everywhere they
+    occur: buried distribution mains gaining heat from the soil, and an ice store gaining heat
+    from 45 degC afternoon air. The store is coupled hydraulically, so charging genuinely forces
+    the plant to produce colder water and pay for it in COP. This is the scenario to use when
+    the question is "how much flexibility does this system actually have?".
+
+# ---------------------------------------------------------------------------
+# Degrees of freedom in this scenario
+# ---------------------------------------------------------------------------
+# Pressure : 6 pipes fix their own drop from geometry (pipe_model: darcy).
+#            The bypass valve and all three building legs are free, so their
+#            solved drops are what real balancing valves would provide.
+#            2n = 6 fixed for n = 3 buildings. Consistent.
+# Energy   : every pipe has heat_model 'ua', so every pipe's duty is fixed by
+#            UA and the soil temperature. The one free energy variable in the
+#            chilled-water loop is the chiller's evaporator duty, released by
+#            plant_control: supply_temperature. The plant duty is therefore a
+#            *result*: building demand + pipe gain + pump heat + store exchange.
+# ---------------------------------------------------------------------------
+
+network:
+  chilled_water_cycle_closer: chilled water cycle closer
+
+design:
+  supply_temperature_degC: 7.0
+  building_return_temperature_degC: 12.0
+  ambient_temperature_degC: 43.0
+  ground_temperature_degC: 29.4        # soil at 1.2 m in a Riyadh July; matches the
+                                       # profile harmonic below, so design and offdesign agree
+  condenser_inlet_temperature_degC: 36.5
+  condenser_outlet_temperature_degC: 41.5
+  chilled_water_pressure_bar: 6.0      # higher than the adiabatic scenarios: a
+                                       # 3 km network needs the head
+  condenser_pressure_bar: 3.0
+  pump_power_W: 12800.0
+  pump_efficiency: 0.72
+  bypass_mass_flow_kg_s: 0.10
+  cp_water_J_kgK: 4180.0
+  plant_control: supply_temperature
+
+chiller:
+  label: riyadh_heat_gain_chiller
+  T_evap_degC: 2.0
+  T_cond_degC: 46.0
+  eta_s: 0.75
+  refrigerant: R134a
+  pressure_ratios:
+    evap_1: 0.999
+    evap_2: 0.999
+    cond_1: 0.999
+    cond_2: 1.0
+  native_offdesign:
+    enabled: true
+    evaporator_ttd_l: null             # design evaporating temperature fixed instead
+    condenser_ttd_u: null
+    use_pressure_loss_characteristics: false
+
+cooling_tower:
+  label: riyadh cooling tower
+  fluid:
+    water: 1.0
+  pr: null
+  approach_temperature_K: -6.5
+  native_offdesign: false
+  start_mass_flow_kg_s: 60.0
+
+buildings:
+  - label: building 1
+    Q_design_W: 260000.0
+    pr: null
+    archetype: office
+  - label: building 2
+    Q_design_W: 210000.0
+    pr: null
+    archetype: hotel
+  - label: building 3
+    Q_design_W: 240000.0
+    pr: null
+    archetype: retail
+
+branch:
+  label: district
+  origin_m: [0.0, 0.0]
+  heading_deg: 0
+  pump_placement: supply_inlet
+  pump_label: main pump
+  native_offdesign: false
+  pipe_model: darcy                    # geometry drives pressure at part load too
+  fix_pump_power: false
+  # Sized so the index (last) building keeps ~0.7 bar of valve authority.
+  # Below ~1.35 the round-trip pipe friction exceeds the head and the far end
+  # cannot be served. Branch.pressure_feasibility() reports that explicitly.
+  pump_pressure_ratio: 1.45
+  bypass_dp: null                      # free: the bypass valve balances the loop,
+                                       # which frees all six pipes to fix their own drop
+
+  # Default heat model for every pipe below. 'ua' derives the conductance from
+  # the pipe geometry and insulation, then hands UA + soil temperature to TESPy
+  # so the gain is computed from the *actual* water temperature each snapshot.
+  heat_model: ua
+  thermal_defaults:
+    placement: buried
+    insulation: pur
+    insulation_thickness_m: 0.05
+    burial_depth_m: 1.2
+    ground: moist soil
+    pipe_wall_thickness_m: 0.006
+    twin_spacing_m: 0.7                # supply and return share the trench
+    ambient_source: ground             # buried pipes track soil, not dry-bulb air
+
+  pipes:
+    # heading_deg is the plan-view bearing, degrees counter-clockwise from east.
+    # It changes nothing the solver sees; it is what lets discoolpy.layout draw
+    # this network as the street it actually follows rather than a straight line.
+    supply_1:                          # plant to the first building: the long leg
+      L: 800.0
+      D: 0.20                          # 34.1 kg/s -> 1.09 m/s
+      ks: 0.00005
+      heading_deg: 0                   # east along the main road
+    supply_2:
+      L: 400.0
+      D: 0.15                          # 21.6 kg/s -> 1.23 m/s
+      ks: 0.00005
+      heading_deg: -20                 # the road bends south-east
+    supply_3:
+      L: 300.0
+      D: 0.125                         # 11.6 kg/s -> 0.95 m/s
+      ks: 0.00005
+      heading_deg: 25                  # and back north-east to the last block
+    return_3:
+      L: 300.0
+      D: 0.125
+      ks: 0.00005
+    return_2:
+      L: 400.0
+      D: 0.15
+      ks: 0.00005
+    return_1:
+      L: 800.0
+      D: 0.20
+      ks: 0.00005
+
+storage:
+  enabled: true
+  label: ice_storage
+  storage_type: ice
+  capacity_kWh: 2400.0
+  initial_soc: 0.60          # near the cyclic steady state for this target
+  max_charge_kW: 260.0
+  max_discharge_kW: 260.0
+  charge_efficiency: 0.94
+  discharge_efficiency: 0.96
+
+  # The store is a real element in the chilled-water loop rather than a
+  # rescaling of the building duties, so charging depresses the plant's leaving
+  # water temperature and the resulting COP penalty shows up in the results.
+  coupling: hydraulic
+  hydraulic_pr: 0.998
+
+  # Ambient-driven tank gain instead of a flat percentage per day. At 45 degC
+  # this store loses roughly three times what it loses at 15 degC, and the loss
+  # peaks exactly when the stored cooling is worth most.
+  loss_model: ua
+  thermal:
+    volume_m3: 420.0
+    insulation: pur
+    insulation_thickness_m: 0.10
+    height_to_diameter: 1.2
+    buried_fraction: 0.0
+    storage_temperature_degC: 0.0      # ice: phase change pins the temperature
+    temperature_varies_with_soc: false
+
+  # Set close to the mean plant duty (~545 kW over this week) so charging and
+  # discharging roughly balance. Set it too high and the store simply saturates.
+  target_chiller_load_kW: 600.0
+  min_soc: 0.05
+  max_soc: 0.97
+
+profiles:
+  start: '2026-07-01 00:00:00'
+  periods: 336                          # 7 days at 30 min
+  freq: 30min
+  daily_high_degC: [43.0, 44.0, 42.5, 45.0, 44.0, 43.5, 42.8]
+  daily_low_degC: [29.0, 30.0, 29.2, 31.0, 30.0, 29.5, 29.0]
+  peak_solar_W_m2: 950.0
+  ground:
+    depth_m: 1.2
+    mean_annual_degC: 25.0
+    annual_amplitude_K: 10.0
+
+economics:
+  # Flat energy price with a hot-afternoon peak block, in currency per kWh.
+  tariff:
+    0: 0.05
+    1: 0.05
+    2: 0.05
+    3: 0.05
+    4: 0.05
+    5: 0.05
+    6: 0.08
+    7: 0.08
+    8: 0.08
+    9: 0.08
+    10: 0.12
+    11: 0.12
+    12: 0.28
+    13: 0.28
+    14: 0.28
+    15: 0.28
+    16: 0.28
+    17: 0.28
+    18: 0.12
+    19: 0.12
+    20: 0.12
+    21: 0.08
+    22: 0.05
+    23: 0.05
+  carbon_intensity_kg_kWh: 0.55
+
+solver:
+  iterinfo: false
+  max_iter: 300
+  progress_interval: 48
+  initial_pressure_step_bar: 0.08
+
+outputs:
+  output_dir: ../outputs/riyadh_heat_gains
+  profile_csv: input_profile.csv
+  without_storage_csv: without_storage_results.csv
+  with_storage_csv: with_storage_results.csv
+  comparison_csv: storage_comparison_timeseries.csv
+  summary_md: flexibility_summary.md
+  plot_png: storage_comparison_results.png

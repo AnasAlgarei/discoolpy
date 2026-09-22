@@ -1,0 +1,295 @@
+# =============================================================================
+# Blank DisCoolPy scenario, ready to fill in
+# =============================================================================
+# This is the template `discoolpy new` writes, kept in the repository so you
+# can open it, edit it and run it without generating anything first. It is
+# paired with examples/blank_scenario.ipynb, which walks through the same file
+# cell by cell.
+#
+# Fill in the values marked TODO. Everything else already has a working
+# default, and the file runs as it stands, so you can check each change as you
+# make it:
+#
+#   discoolpy check blank_scenario.yaml      # design point only, a few seconds
+#   discoolpy plot  blank_scenario.yaml      # plan view, no solve needed
+#   discoolpy run   blank_scenario.yaml      # the time series
+#
+# or from Python:
+#
+#   from discoolpy import check_scenario, run_scenario
+#   check_scenario("blank_scenario.yaml")
+#   result = run_scenario("blank_scenario.yaml", periods=48)
+#
+# Sections you do not need can be deleted outright. A scenario that says
+# nothing about heat gains, storage or thermal mass simply does not model
+# them. The full key list is in docs/configuration.md.
+# =============================================================================
+
+metadata:
+  name: blank_scenario
+  description: >
+    TODO: what this scenario is for, and what question you are asking of it.
+
+
+# -----------------------------------------------------------------------------
+# design: the boundary conditions that size the plant
+# -----------------------------------------------------------------------------
+# Every key here has a fallback, so delete any line you have no opinion about.
+# The defaults are ordinary chilled-water district values.
+design:
+  supply_temperature_degC: 7.0            # chilled water entering the network
+  building_return_temperature_degC: 12.0  # design return; the two set your delta-T
+  ambient_temperature_degC: 35.0          # design dry bulb
+  condenser_inlet_temperature_degC: 30.0
+  condenser_outlet_temperature_degC: 35.0
+  chilled_water_pressure_bar: 3.0         # pressure anchor at the branch inlet
+  condenser_pressure_bar: 3.0
+  pump_efficiency: 0.70
+  bypass_mass_flow_kg_s: 0.05             # minimum flow through the end bypass
+  cp_water_J_kgK: 4180.0
+
+  # pump_power_W: 2000.0
+  #   Design pump shaft power. Left out, DisCoolPy sizes it from the design
+  #   flow against a nominal 1 bar head, which converges but is not a sizing.
+  #   Put your real number here once you have one.
+
+  # plant_control: supply_temperature
+  #   How the central chiller duty is decided. 'supply_temperature' releases
+  #   the duty and solves it from the loop, so plant load is a result: demand
+  #   plus pipe gain plus pump heat plus store exchange. 'evaporator_duty'
+  #   asserts it instead, and then exactly one pipe must be left without an
+  #   energy specification. Heat gains force the first and refuse the second.
+  #   Left out, DisCoolPy picks: supply_temperature if any heat gain is on.
+
+
+# -----------------------------------------------------------------------------
+# buildings: one entry per substation
+# -----------------------------------------------------------------------------
+# Labels must be unique. They name TESPy components and every result column.
+# Leave `pr` out (or null) and the substation's pressure drop is solved rather
+# than asserted, which is what a real balancing valve does. Recommended.
+buildings:
+  - label: building_1
+    Q_design_W: 150000.0        # TODO: design cooling demand, W
+    archetype: office           # office | hotel | retail | residential | hospital | datacentre
+  - label: building_2
+    Q_design_W: 150000.0        # TODO
+    archetype: hotel
+
+  # A building with weather-driven demand and thermal mass, for pre-cooling
+  # studies. Delete if you do not need it.
+  #
+  # - label: building_3
+  #   Q_design_W: 200000.0
+  #   load_model: thermal_mass
+  #   envelope:
+  #     UA_W_K: 3200.0
+  #     solar_aperture_m2: 90.0
+  #     infiltration_kg_s: 1.6
+  #     indoor_setpoint_degC: 23.0
+  #   thermal_mass:
+  #     capacitance_MJ_K: 260.0
+  #     min_temperature_degC: 20.5   # how far pre-cooling may go
+  #     max_temperature_degC: 25.5   # how far coasting may go
+  #     max_cooling_W: 260000.0
+
+
+# -----------------------------------------------------------------------------
+# branch: the street the buildings sit on
+# -----------------------------------------------------------------------------
+branch:
+  label: district
+
+  # autofill works out the pipe pressure ratios and the adiabatic pipe duties
+  # from the number of buildings, so you can leave `pipes` out entirely while
+  # you get the rest of the scenario right. Set it false, or delete it, once
+  # you write real pipe geometry below.
+  autofill: true
+
+  pump_placement: supply_inlet    # supply_inlet | return_outlet | null
+  pump_label: main pump
+  pipe_model: pressure_ratio      # pressure_ratio | length_derived_pr | darcy
+  heat_model: adiabatic           # adiabatic | fixed | ua | tespy_buried | tespy_surface
+  bypass_dp: null                 # null lets the end bypass balance the loop
+
+  origin_m: [0.0, 0.0]            # plan-view position of the branch inlet
+  heading_deg: 0                  # bearing, degrees counter-clockwise from east
+
+  # ---------------------------------------------------------------------------
+  # pipes: supply_1..supply_n and return_1..return_n, n = buildings on the branch
+  # ---------------------------------------------------------------------------
+  # supply_i runs from tap i-1 to tap i; return_i runs from junction i back
+  # towards the plant. Naming a pipe that does not exist is refused, with the
+  # list of keys that do.
+  #
+  # Delete `autofill` above and uncomment this once you have real lengths.
+  # With pipe_model: darcy the geometry fixes the pressure drop, and with
+  # heat_model: ua it also fixes the heat gain, so the same three numbers do
+  # both jobs.
+  #
+  # pipes:
+  #   supply_1:
+  #     L: 400.0                  # m
+  #     D: 0.20                   # m, inner diameter
+  #     ks: 0.00005               # m, absolute roughness (steel)
+  #     heading_deg: 0            # bearing of this leg, layout only
+  #   supply_2: {L: 250.0, D: 0.15, ks: 0.00005, heading_deg: -30}
+  #   return_2: {L: 250.0, D: 0.15, ks: 0.00005}
+  #   return_1: {L: 400.0, D: 0.20, ks: 0.00005}
+
+  # ---------------------------------------------------------------------------
+  # thermal_defaults: what every pipe on this branch inherits
+  # ---------------------------------------------------------------------------
+  # Only used when heat_model is 'ua' or one of the native TESPy models.
+  #
+  # thermal_defaults:
+  #   placement: buried           # buried | surface | exposed | tunnel
+  #   insulation: pur             # named material, or a W/(m.K) number
+  #   insulation_thickness_m: 0.05
+  #   burial_depth_m: 1.2
+  #   ground: moist soil
+  #   pipe_wall_thickness_m: 0.006
+  #   twin_spacing_m: 0.7         # supply and return share a trench
+  #   ambient_source: ground      # buried pipes track soil, not air
+
+  # ---------------------------------------------------------------------------
+  # terminals: what closes the end of the branch
+  # ---------------------------------------------------------------------------
+  # Leave this out and you get one bypass valve, which is what a dead-end
+  # street needs. Declare it and the branch becomes the root of a tree.
+  #
+  # A fork puts its terminals in parallel between the same two nodes, so leave
+  # every terminal's `dp` free (null) and let the balancing valves balance.
+  #
+  # terminals:
+  #   - type: bypass
+  #     label: end of line bypass
+  #     m_kg_s: 0.05
+  #     dp: null
+  #
+  #   - type: plant                     # a satellite plant: its own chiller,
+  #     label: north satellite          # tower and optionally its own store
+  #     m_kg_s: 8.0
+  #     Q_evap_kW: 180.0
+  #     dispatch: proportional          # follow the district, or 'fixed'
+  #     chiller: {T_evap_degC: 2.0, eta_s: 0.72}
+  #     cooling_tower: {approach_temperature_K: -6.0}
+  #
+  #   - type: branch                    # a street that splits; nests to any depth
+  #     label: east spur
+  #     heading_deg: -45
+  #     buildings: [building_2]
+  #     pipes:
+  #       supply_1: {L: 180.0, D: 0.10, ks: 0.00005}
+  #       return_1: {L: 180.0, D: 0.10, ks: 0.00005}
+
+
+# -----------------------------------------------------------------------------
+# storage: a cold store on the plant
+# -----------------------------------------------------------------------------
+# With this enabled, `discoolpy run` pairs the scenario against itself without
+# the store and reports what the store bought. Delete the section, or set
+# enabled: false, for a network with no storage.
+storage:
+  enabled: false
+
+  # label: cold_store
+  # storage_type: ice                 # ice | chilled_water | pcm
+  # capacity_kWh: 2400.0              # TODO
+  # initial_soc: 0.60
+  # max_charge_kW: 260.0
+  # max_discharge_kW: 260.0
+  # charge_efficiency: 0.94
+  # discharge_efficiency: 0.96
+  # min_soc: 0.05
+  # max_soc: 0.97
+  #
+  # target_chiller_load_kW: 600.0
+  #   The flat plant duty the store aims at. Set it near the mean plant duty
+  #   so charging and discharging roughly balance over a day. Too high and the
+  #   store simply saturates and stops doing anything.
+  #
+  # coupling: hydraulic
+  #   'hydraulic' puts the store in the chilled-water loop as a real heat
+  #   flow, so charging forces the plant to make colder water and pay for it
+  #   in COP. 'supervisory' rescales the building duties instead: faster, but
+  #   it shifts energy at unchanged efficiency and so flatters storage.
+  # hydraulic_pr: 0.998
+  #
+  # loss_model: ua
+  #   'ua' drives the standing loss from ambient, which is what makes a tank
+  #   lose most on the afternoon its charge is worth most. 'fraction' uses a
+  #   flat standby_loss_fraction_per_day instead.
+  # thermal:
+  #   volume_m3: 420.0
+  #   insulation: pur
+  #   insulation_thickness_m: 0.10
+  #   height_to_diameter: 1.2
+  #   storage_temperature_degC: 0.0   # ice: phase change pins it
+  #   temperature_varies_with_soc: false
+  #
+  # stratified:
+  #   enabled: true
+  #     A 1-D layered chilled-water tank instead of a scalar reservoir, so the
+  #     thermocline is resolved and delivery temperature degrades as the tank
+  #     empties. Chilled water only, not ice.
+  #   layers: 14
+  #   height_to_diameter: 2.5         # tall and slender stratifies better
+  #   charged_temperature_degC: 7.0   # must equal the supply setpoint
+  #   discharged_temperature_degC: 12.0   # must equal the design return
+
+
+# -----------------------------------------------------------------------------
+# profiles: the weather and demand time series
+# -----------------------------------------------------------------------------
+# Leave this as it is for a synthetic profile generated from the archetypes
+# above. periods x freq is the length of the run: 48 at 30min is one day, 336
+# is a week. Start short.
+profiles:
+  start: '2026-07-01 00:00:00'
+  periods: 48
+  freq: 30min
+  daily_high_degC: [38.0]         # TODO: one entry per day, or one for all
+  daily_low_degC: [26.0]
+  peak_solar_W_m2: 900.0
+
+  # ground:
+  #   depth_m: 1.2                # soil temperature at burial depth, from the
+  #   mean_annual_degC: 25.0      # Kusuda harmonic. Buried pipes track this
+  #   annual_amplitude_K: 10.0    # rather than dry-bulb air.
+
+
+# -----------------------------------------------------------------------------
+# economics: what the electricity costs and emits
+# -----------------------------------------------------------------------------
+# Only used by the flexibility assessment. Without a tariff it reports energy
+# and peak but no cost.
+economics:
+  carbon_intensity_kg_kWh: 0.55
+
+  # tariff:                       # currency per kWh, by hour of day
+  #   0: 0.05
+  #   ...
+  #   12: 0.28
+  #   ...
+  #   23: 0.05
+
+
+# -----------------------------------------------------------------------------
+# solver and outputs
+# -----------------------------------------------------------------------------
+solver:
+  iterinfo: false
+  max_iter: 300
+  progress_interval: 24           # print every nth snapshot
+
+outputs:
+  output_dir: blank_scenario_outputs   # relative to THIS file, not your shell
+  profile_csv: input_profile.csv
+  results_csv: results.csv
+  # Paired storage runs write these instead:
+  without_storage_csv: without_storage_results.csv
+  with_storage_csv: with_storage_results.csv
+  comparison_csv: storage_comparison_timeseries.csv
+  summary_md: flexibility_summary.md
+  plot_png: storage_comparison_results.png

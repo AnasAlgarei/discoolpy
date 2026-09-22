@@ -1,6 +1,24 @@
 metadata:
   name: config_length_pipes
-  description: Planned-network three-building district-cooling scenario with length-based Darcy pipe inputs and optional ice storage.
+  description: >
+    Planned-network three-building district-cooling scenario with length-based Darcy pipe inputs
+    and optional ice storage. Pressure drop is recomputed from geometry at every snapshot, so
+    part-load hydraulics are honoured (unlike length_derived_pr, which freezes it at design flow).
+
+# ---------------------------------------------------------------------------
+# Hydraulic degrees of freedom
+# ---------------------------------------------------------------------------
+# In `darcy` mode a pipe's L+D+ks IS its pressure specification. The branch has
+# n+1 = 4 loops, so exactly 2n = 6 elements may fix a drop.
+#
+# Fixed here : supply_2, supply_3, return_1, return_2, return_3, bypass  (6)
+# Free here  : supply_1, building 1, building 2, building 3              (4)
+#
+# Previously this file gave geometry to supply_2/3 and return_3 only, while
+# also fixing pr on all three buildings: 7 fixed elements, and return_1 and
+# return_2 with no specification at all, leaving the whole ladder unanchored.
+# It was simultaneously over- and under-determined, and TESPy refused it.
+# ---------------------------------------------------------------------------
 
 network:
   chilled_water_cycle_closer: chilled water cycle closer
@@ -47,13 +65,16 @@ cooling_tower:
 buildings:
   - label: building 1
     Q_design_W: 260000.0
-    pr: 0.995
+    pr: null          # solved output: the balancing-valve drop at this building
+    archetype: office
   - label: building 2
     Q_design_W: 210000.0
-    pr: 0.995
+    pr: null
+    archetype: hotel
   - label: building 3
     Q_design_W: 240000.0
-    pr: 0.995
+    pr: null
+    archetype: retail
 
 branch:
   label: district
@@ -82,8 +103,16 @@ branch:
       ks: 0.00005
       Q: 0.0
     return_2:
+      L: 180.0
+      D: 0.30
+      ks: 0.00005
       Q: 0.0
-    return_1: {}
+    return_1:
+      L: 120.0
+      D: 0.35
+      ks: 0.00005
+      # Q deliberately absent: with plant_control='evaporator_duty' the loop
+      # needs exactly one free energy variable, and this pipe is it.
 
 storage:
   enabled: true
