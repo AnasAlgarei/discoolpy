@@ -561,6 +561,7 @@ def make_cooling_tower(cfg: Mapping[str, Any], config: Mapping[str, Any], label:
         pr=cfg.get("pr"),
         ambient_temperature=ambient,
         approach_temperature=float(cfg.get("approach_temperature_K", t_in - ambient)),
+        condenser_flow_control=str(cfg.get("condenser_flow_control", "fixed_return")),
     )
 
 

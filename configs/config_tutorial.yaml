@@ -1,83 +1,98 @@
 # ============================================================
-# Tutorial: Two-Building District Cooling Network
+# Tutorial scenario: a two-building district cooling network
 # ============================================================
-# A minimal, self-contained scenario with dummy data intended
-# for first-time users of the discoolpy.
+# A deliberately small scenario for a first run. It carries only
+# what this network needs; everything else falls back to the
+# package defaults in discoolpy.utils.DESIGN_DEFAULTS. The other
+# files in this directory show the sections left out here:
+# storage, pipe heat gains, building envelopes, satellite plants,
+# tariffs and branching topologies.
 #
-# Pressure-ratio rules for this topology:
-#   - Set `pr` on all buildings EXCEPT the last one.
-#   - Set `pr` on supply pipes that connect distinct pressure
-#     islands (e.g. supply_2 links the main island to the
-#     end-of-line island).
-#   - Set `pr` on return_1 (the main return header) to anchor
-#     the return-side pressure.
-#   - Do NOT set `pr` on the last building (it is short-
-#     circuited by the bypass valve and would create a cycle).
+# Run it with:
+#   from discoolpy import check_scenario, run_scenario
+#   check_scenario("../configs/config_tutorial.yaml")
+#   result = run_scenario("../configs/config_tutorial.yaml")
 # ============================================================
 
-network:
-  chilled_water_cycle_closer: chw cycle closer
+metadata:
+  name: tutorial
+  description: Two-building district cooling network with dummy data
 
+# Design point. The solve at these conditions sizes the heat
+# exchangers, the pump and the condenser-water flow; every later
+# snapshot is an offdesign solve against that sizing.
 design:
-  supply_temperature_degC: 7.0
-  building_return_temperature_degC: 12.0
-  ambient_temperature_degC: 35.0
-  condenser_inlet_temperature_degC: 30.0
-  condenser_outlet_temperature_degC: 35.0
-  chilled_water_pressure_bar: 3.0
-  condenser_pressure_bar: 3.0
-  pump_power_W: 300.0
-  pump_efficiency: 0.70
-  bypass_mass_flow_kg_s: 0.05
-  cp_water_J_kgK: 4180.0
+  supply_temperature_degC: 7.0              # chilled water leaving the plant
+  building_return_temperature_degC: 12.0    # chilled water coming back
+  condenser_inlet_temperature_degC: 32.0    # cooling water entering the chiller
+  condenser_outlet_temperature_degC: 38.0   # cooling water leaving the chiller
+  pump_power_W: 500.0                       # distribution pump at design flow
+
+# Demand. `archetype` picks the daily occupancy shape the profile
+# generator uses: office, hotel, retail, residential, hospital or
+# datacentre.
+buildings:
+  - label: office
+    Q_design_W: 150000.0
+    archetype: office
+    pr: 0.995        # pressure ratio across the building heat exchanger
+  - label: hotel
+    Q_design_W: 120000.0
+    archetype: hotel
+    pr: null         # last building: left free, the bypass closes the loop
 
 chiller:
   label: tutorial_chiller
-  T_evap_degC: 2.0
-  T_cond_degC: 40.0
-  eta_s: 0.80
+  T_evap_degC: 2.0           # design evaporating temperature
+  T_cond_degC: 44.0          # design condensing temperature
+  eta_s: 0.75                # design isentropic efficiency
   refrigerant: R134a
   native_offdesign:
-    enabled: true
-    condenser_ttd_u: 5.0
+    enabled: true            # size kA at design, reuse it offdesign
 
 cooling_tower:
   label: tutorial_cooling_tower
-  fluid:
-    water: 1.0
-  approach_temperature_K: -5.0
-  native_offdesign: false
-  start_mass_flow_kg_s: 20.0
+  # The design solve sizes the condenser-water flow from the two
+  # design temperatures. `design_flow` keeps that flow for every
+  # offdesign solve and lets the leaving temperature move, which is
+  # how a condenser-water loop runs: the pump holds its duty and the
+  # water comes back as warm as the weather makes it.
+  condenser_flow_control: design_flow
+  # Fallback only, for snapshots that carry no condenser-water
+  # temperature of their own. The generated profile always does.
+  approach_temperature_K: 4.0
 
-buildings:
-  - label: building_1
-    Q_design_W: 150000.0   # 150 kW peak cooling load
-    pr: 0.995              # small pressure drop across building heat exchanger
-  - label: building_2
-    Q_design_W: 150000.0   # 150 kW peak cooling load
-    pr: null               # last building: pr must NOT be set (bypass short-circuit)
-
+# Distribution. `pressure_ratio` is the simplest pipe model: each
+# pipe is given a pressure ratio directly. Q: 0.0 makes a pipe
+# adiabatic. See config_riyadh_heat_gains.yaml for pipes with real
+# geometry and heat gain.
 branch:
   label: tutorial_branch
-  pump_placement: supply_inlet
   pump_label: main pump
-  native_offdesign: false
   pipe_model: pressure_ratio
   pipes:
     supply_1:
-      Q: 0.0               # adiabatic pipe (no heat loss)
+      Q: 0.0
     supply_2:
-      pr: 0.997            # links main pressure island to end-of-line island
+      pr: 0.997      # links the main pressure island to the end of the line
       Q: 0.0
     return_2:
       Q: 0.0
     return_1:
-      pr: 0.999            # anchors the return-header pressure
-      # Q not needed for the last return pipe
+      pr: 0.999      # anchors the return-header pressure
+
+# Four hourly days of synthetic weather and demand: a typical
+# summer day, a heat wave, a milder day, then the first day again.
+profiles:
+  start: "2026-07-01 00:00:00"
+  periods: 96
+  freq: 1h
+  daily_high_degC: [43.0, 46.0, 38.0, 43.0]
+  daily_low_degC: [28.0, 29.0, 27.0, 28.0]
 
 solver:
+  max_iter: 250
   iterinfo: false
-  max_iter: 200
 
 outputs:
   output_dir: tutorial_outputs

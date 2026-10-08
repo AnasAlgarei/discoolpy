@@ -184,6 +184,19 @@ class _Source:
         return range(len(self.results))
 
 
+def _solved_point_label(src: "_Source") -> str:
+    """Name the operating point the live network currently holds.
+
+    Several rows below read a component straight off the TESPy network rather
+    than out of the results frame. The network holds whichever point was solved
+    last: the design point when nothing else has been solved since, and the
+    final snapshot once a time series has run. Reporting the second as the
+    design point would be wrong by the full offdesign swing, so the label
+    follows the source.
+    """
+    return "last solved" if src.has_results else "design"
+
+
 def resolve_source(source: Any, results: Any = None) -> _Source:
     """Normalise any of the accepted inputs into one internal record.
 
@@ -396,12 +409,13 @@ def report_pipes(source: Any, results: Any = None) -> ComponentReport:
             out.add("heat models in use", ", ".join(models), key="models")
             out.add("network conductance", gains.get("network_UA_W_K"), "W/K",
                     ".1f", key="network_UA_W_K")
-            out.add("design supply gain", gains.get("supply_heat_gain_W", 0.0) / W_PER_KW,
-                    "kW", key="design_supply_gain_kW")
-            out.add("design return gain", gains.get("return_heat_gain_W", 0.0) / W_PER_KW,
-                    "kW", key="design_return_gain_kW")
-            out.add("design total gain", gains.get("total_heat_gain_W", 0.0) / W_PER_KW,
-                    "kW", key="design_total_gain_kW")
+            point = _solved_point_label(src)
+            out.add(f"{point} supply gain", gains.get("supply_heat_gain_W", 0.0) / W_PER_KW,
+                    "kW", key="solved_supply_gain_kW")
+            out.add(f"{point} return gain", gains.get("return_heat_gain_W", 0.0) / W_PER_KW,
+                    "kW", key="solved_return_gain_kW")
+            out.add(f"{point} total gain", gains.get("total_heat_gain_W", 0.0) / W_PER_KW,
+                    "kW", key="solved_total_gain_kW")
             lengths = [v["length_m"] for v in active.values() if v["length_m"]]
             if lengths:
                 out.add("routed length", sum(lengths), "m", ".0f", key="length_m")
@@ -542,18 +556,22 @@ def report_chiller(source: Any, results: Any = None) -> ComponentReport:
             out.add("refrigerant", getattr(chiller, "refrigerant", None), key="refrigerant")
             out.add("plant control", getattr(system, "plant_control", None),
                     key="plant_control")
+            # These read the live network, which holds whichever point was
+            # solved last. Over a time series that is the final snapshot, not
+            # the design point, so the label has to say which one it is.
+            point = _solved_point_label(src)
             duty = getattr(chiller, "solved_Q_evap_W", None)
             if duty:
-                out.add("design evaporator duty", float(duty) / W_PER_KW, "kW",
-                        key="design_duty_kW")
+                out.add(f"{point} evaporator duty", float(duty) / W_PER_KW, "kW",
+                        key="solved_duty_kW")
             power = getattr(getattr(chiller, "compressor", None), "P", None)
             power = None if power is None else getattr(power, "val", None)
             if power and power == power:
-                out.add("design compressor power", float(power) / W_PER_KW, "kW",
-                        key="design_power_kW")
+                out.add(f"{point} compressor power", float(power) / W_PER_KW, "kW",
+                        key="solved_power_kW")
                 if duty:
-                    out.add("design COP", float(duty) / float(power), "-", ".3f",
-                            key="design_cop")
+                    out.add(f"{point} COP", float(duty) / float(power), "-", ".3f",
+                            key="solved_cop")
 
     if src.has_results:
         out.add("cooling produced", src.energy_kWh("chiller_Q_evap_W"), "kWh", ".0f",
@@ -614,8 +632,8 @@ def report_cooling_tower(source: Any, results: Any = None) -> ComponentReport:
         out.add("label", getattr(tower, "label", "cooling tower"), key="label")
         rejection = getattr(tower, "heat_rejection", None)
         if rejection is not None and rejection == rejection:
-            out.add("design heat rejection", float(rejection) / W_PER_KW, "kW",
-                    key="design_rejection_kW")
+            out.add(f"{_solved_point_label(src)} heat rejection",
+                    float(rejection) / W_PER_KW, "kW", key="solved_rejection_kW")
         approach = getattr(tower, "approach_temperature_K", None)
         if approach is not None:
             out.add("approach to ambient", approach, "K", key="approach_K")

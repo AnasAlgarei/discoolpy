@@ -14,6 +14,10 @@ from typing import Optional, Sequence
 from tespy.components import CycleCloser, SimpleHeatExchanger
 from tespy.connections import Connection
 
+#: Which condenser-water variable an offdesign solve holds fixed. See the
+#: ``condenser_flow_control`` parameter of :class:`CoolingTower`.
+_FLOW_CONTROL_MODES = {"fixed_return", "design_flow"}
+
 
 @dataclass
 class CoolingTower:
@@ -44,6 +48,20 @@ class CoolingTower:
     approach_temperature:
         Default approach in K used to derive condenser-water inlet temperature
         from ambient temperature if a snapshot does not provide it directly.
+    condenser_flow_control:
+        Which condenser-water variable offdesign solves hold fixed.
+
+        * ``"fixed_return"`` (default): the leaving temperature stays at its
+          design value and the water flow absorbs every change in heat
+          rejection. The flow then rises without bound as the entering
+          temperature approaches the leaving one, is singular where they meet,
+          and reverses above it, all of which TESPy reports as a converged
+          solve. Usable only while the entering temperature stays well below
+          ``T_out_chiller``.
+        * ``"design_flow"``: the pump holds the flow the design solve sized and
+          the leaving temperature is an outcome, which is how a condenser-water
+          loop runs. The entering temperature is then free to go anywhere the
+          weather takes it.
     """
 
     label: str
@@ -54,6 +72,7 @@ class CoolingTower:
     pr: Optional[float] = None
     ambient_temperature: float = 26.0
     approach_temperature: float = 4.0
+    condenser_flow_control: str = "fixed_return"
     tower: SimpleHeatExchanger = field(init=False)
     cycle_closer: CycleCloser = field(init=False)
     cond_in: Optional[Connection] = field(default=None, init=False)
@@ -65,6 +84,11 @@ class CoolingTower:
         self.cycle_closer = CycleCloser(f"{self.label} cycle closer")
         if self.fluid is None:
             self.fluid = {"water": 1.0}
+        if self.condenser_flow_control not in _FLOW_CONTROL_MODES:
+            raise ValueError(
+                f"condenser_flow_control must be one of {sorted(_FLOW_CONTROL_MODES)}, "
+                f"got {self.condenser_flow_control!r}."
+            )
 
     def connect_to_chiller(
         self,
@@ -138,6 +162,18 @@ class CoolingTower:
                     Tamb=self.ambient_temperature,
                     offdesign=["kA_char"],
                 )
+        elif self.condenser_flow_control == "design_flow":
+            # The design solve sizes the water flow from the two temperatures;
+            # offdesign keeps that flow and lets the leaving temperature move.
+            self.cond_in.set_attr(
+                fluid=self.fluid,
+                p=self.p_in_chiller,
+                T=self.T_in_chiller,
+                offdesign=["m"],
+            )
+            self.cond_out.set_attr(T=self.T_out_chiller, design=["T"])
+            if self.pr is not None:
+                self.tower.set_attr(pr=self.pr)
         else:
             self.cond_in.set_attr(fluid=self.fluid, p=self.p_in_chiller, T=self.T_in_chiller)
             self.cond_out.set_attr(T=self.T_out_chiller)

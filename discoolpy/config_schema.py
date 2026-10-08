@@ -1031,6 +1031,7 @@ _COOLING_TOWER_KEYS = {
     "label", "fluid", "pr", "approach_temperature_K", "native_offdesign",
     "start_mass_flow_kg_s", "condenser_inlet_temperature_degC",
     "condenser_outlet_temperature_degC", "condenser_pressure_bar",
+    "condenser_flow_control",
 }
 
 _PIPE_KEYS = {
