@@ -181,7 +181,7 @@ def cmd_report(args: argparse.Namespace) -> int:
                 progress=not args.quiet,
                 plot=False,
             )
-            paths = result.plot_all(directory, prefix=path.stem, dpi=args.dpi)
+            paths = result.plot_all(directory, dpi=args.dpi)
             print()
             result.print_report()
 
